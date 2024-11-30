@@ -1,7 +1,7 @@
 import torch
 import lightning.pytorch as pl
 from models.vq_transformer import RQBottleneckTransformer
-from trainer.wer_metrics import compute_wer
+from trainer.wer_metrics import compute_wer_cer
 
 
 class WhisperVQModule(pl.LightningModule):
@@ -150,8 +150,18 @@ class WhisperVQModule(pl.LightningModule):
         if hasattr(self.model, "get_codebook_stats"):
             stats = self.model.get_codebook_stats()
             if stats:
-                self.log("codebook/used_codes", stats["used_codes"], sync_dist=True, prog_bar=True)
-                self.log("codebook/utilization", stats["utilization"], sync_dist=True, prog_bar=True)
+                self.log(
+                    "codebook/used_codes",
+                    stats["used_codes"],
+                    sync_dist=True,
+                    prog_bar=True,
+                )
+                self.log(
+                    "codebook/utilization",
+                    stats["utilization"],
+                    sync_dist=True,
+                    prog_bar=True,
+                )
 
         return loss
 
@@ -175,43 +185,104 @@ class WhisperVQModule(pl.LightningModule):
                     metrics["val_used_codes"] = stats["used_codes"]
 
         # Log all metrics
-        self.log_dict(metrics, sync_dist=True)
+        self.log_dict(metrics, sync_dist=True, prog_bar=True)
 
     def test_step(self, batch, batch_idx):
         """
-        Perform a test step.
-
-        Args:
-            batch: Input batch containing samples, mask, and tokens
-            batch_idx: Index of current batch
-
-        Returns:
-            dict: Dictionary containing test metrics
+        Perform a test step and collect results in DataFrame.
         """
+        import pandas as pd
+
         samples, mask, input_toks, output_toks = batch
 
-        # Get model predictions
-        logits, _, loss = self.model(samples, mask, input_toks, output_toks)
+        # Forward pass
+        _, logits, loss = self.model(samples, mask, input_toks, output_toks)
         pred_ids = torch.argmax(logits, dim=-1)
 
+        # Ensure output_toks is 2D
+        if output_toks.dim() == 3:
+            output_toks = output_toks.squeeze(1)
+
+        # Get predictions and targets as text
+        predictions = []
+        targets = []
+        for pred, target in zip(pred_ids, output_toks):
+            valid_mask = target != -100
+            pred_clean = pred[valid_mask]
+            target_clean = target[valid_mask]
+
+            # Convert to text
+            pred_text = self.model.tokenizer.decode(pred_clean)
+            target_text = self.model.tokenizer.decode(target_clean)
+
+            predictions.append(pred_text)
+            targets.append(target_text)
+
         # Calculate metrics
+        wer, cer = self._calculate_wer_cer(pred_ids, output_toks)
+        entropy = self._calculate_entropy(logits)
+
+        # Store results in DataFrame
+        batch_results = pd.DataFrame(
+            {
+                "batch_idx": batch_idx,
+                "prediction": predictions,
+                "target": targets,
+                "loss": loss.item(),
+                "wer": wer,
+                "cer": cer,
+                "entropy": entropy,
+            }
+        )
+
+        # Initialize results list if not exists
+        if not hasattr(self, "test_results"):
+            self.test_results = []
+        self.test_results.append(batch_results)
+
+        # Log metrics as before
         metrics = {
-            "test_loss": loss,
-            "test_wer": self._calculate_wer(pred_ids, output_toks),
-            "test_entropy": self._calculate_entropy(logits),
+            "test_loss": loss.item(),
+            "test_wer": wer,
+            "test_cer": cer,
+            "test_entropy": entropy,
         }
 
+        if hasattr(self.model, "get_codebook_stats"):
+            stats = self.model.get_codebook_stats()
+            if stats:
+                metrics["test_codebook_utilization"] = stats["utilization"]
+                metrics["test_used_codes"] = stats["used_codes"]
+
         self.log_dict(metrics, sync_dist=True)
+        print(metrics)
         return metrics
 
-    def _calculate_wer(self, pred_ids, target_ids):
-        """Calculate Word Error Rate"""
-        # Remove padding tokens (-100)
-        target_mask = target_ids != -100
-        pred_clean = pred_ids[target_mask]
-        target_clean = target_ids[target_mask]
+    def _calculate_wer_cer(self, pred_ids, target_ids):
+        """
+        Calculate WER & CER for batch of predictions
 
-        return compute_wer(pred_clean, target_clean)
+        Args:
+            pred_ids: Tensor of shape [batch_size, seq_len]
+            target_ids: Tensor of shape [batch_size, seq_len]
+
+        Returns:
+            tuple: (wer, cer) scores
+        """
+        # Process each sequence in the batch
+        predictions = []
+        targets = []
+
+        for pred, target in zip(pred_ids, target_ids):
+            # Remove padding tokens (-100)
+            valid_mask = target != -100
+            pred_clean = pred[valid_mask]
+            target_clean = target[valid_mask]
+
+            predictions.append(pred_clean)
+            targets.append(target_clean)
+
+        return compute_wer_cer(predictions, targets, tokenizer=self.model.tokenizer)
 
     def _calculate_entropy(self, logits):
         """Calculate entropy of predictions"""

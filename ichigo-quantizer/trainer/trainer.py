@@ -147,7 +147,7 @@ class WhisperVQTrainer:
 
     def test(self, model, test_dataset):
         """
-        Evaluate model on test dataset.
+        Evaluate model on test dataset and save results.
 
         Args:
             model: The WhisperVQ model to evaluate
@@ -173,6 +173,18 @@ class WhisperVQTrainer:
             print(f"Loss: {results[0]['test_loss']:.4f}")
             print(f"WER: {results[0]['test_wer']:.2%}")
             print(f"Entropy: {results[0]['test_entropy']:.4f}")
+
+            # Save detailed test results if available
+            if hasattr(lightning_module, "test_results"):
+                import pandas as pd
+
+                Path(self.config.task).mkdir(exist_ok=True, parents=True)
+                fname = f"{self.config.task}/{self.run_name}_test_results.csv"
+                final_results = pd.concat(
+                    lightning_module.test_results, ignore_index=True
+                )
+                final_results.to_csv(fname, index=False)
+                print(f"Saved detailed test results to: {fname}")
 
         return results[0] if results else None
 

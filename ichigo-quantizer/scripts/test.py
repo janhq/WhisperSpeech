@@ -10,6 +10,7 @@ from config.vq_config import VQConfig
 from models.factory import make_vq_model
 from trainer.trainer import WhisperVQTrainer
 from data.whisper_dataset import load_test_dataset
+from trainer.lightning_module import WhisperVQModule
 
 
 def parse_args():
@@ -44,7 +45,11 @@ def main():
 
     # Load model
     model = make_vq_model(args.model_size, config=vq_config)
-    model.load_model(args.model_path)
+    lightning_module = WhisperVQModule(model, trainer_config)
+    lightning_module.load_from_checkpoint(args.model_path)
+    model = lightning_module.model
+
+    model.setup(device="cuda")
 
     # Create test dataset
     test_dataset = load_test_dataset(
