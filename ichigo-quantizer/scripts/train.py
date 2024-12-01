@@ -26,6 +26,7 @@ def parse_args():
         type=int,
         default=100,
     )
+    parser.add_argument("--resume-from", type=str)
     parser.add_argument("--wandb-task-name", type=str, default=None)
     return parser.parse_args()
 
@@ -54,6 +55,8 @@ def main():
         wandb_task_name=args.wandb_task_name,
         validate_every_n_steps=args.validate_every_n_steps,
         num_gpus=args.num_gpus,
+        resume_from=args.resume_from,
+        checkpoint_dir=f"checkpoints/{task_name}",
     )
 
     # Create model

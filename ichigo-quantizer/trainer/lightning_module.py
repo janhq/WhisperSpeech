@@ -107,17 +107,9 @@ class WhisperVQModule(pl.LightningModule):
         )
 
         # Create main training scheduler
-        if self.config.lr_schedule == "cosine":
-            main_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=total_steps - warmup_steps, eta_min=lr / 25
-            )
-        else:  # linear schedule
-            main_scheduler = torch.optim.lr_scheduler.LinearLR(
-                optimizer,
-                start_factor=1.0,
-                end_factor=1 / 25,
-                total_iters=total_steps - warmup_steps,
-            )
+        main_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=total_steps - warmup_steps, eta_min=lr / 25
+        )
 
         # Combine schedulers
         scheduler = torch.optim.lr_scheduler.SequentialLR(

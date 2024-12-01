@@ -1,4 +1,5 @@
-import whisper 
+import whisper
+
 
 def get_tokenizer(model, language):
     multilingual = not model.endswith(".en")
