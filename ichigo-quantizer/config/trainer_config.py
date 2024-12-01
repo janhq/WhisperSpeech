@@ -60,6 +60,7 @@ class TrainerConfig:
     precision: str = "16-mixed"
     torch_compile: bool = False
     strategy: str = "ddp"
+    num_gpus: int = 1
 
     # Dataset configuration
     training_data: List[str] = None

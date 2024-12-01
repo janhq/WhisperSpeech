@@ -20,6 +20,7 @@ def parse_args():
     parser.add_argument("--training-data", type=str, required=True)
     parser.add_argument("--validation-data", type=str, required=True)
     parser.add_argument("--tunables", type=str, default="")
+    parser.add_argument("--num-gpus", type=int, default=1)  
     parser.add_argument(
         "--validate-every-n-steps",
         type=int,
@@ -53,6 +54,7 @@ def main():
         vq_config=vq_config,
         wandb_task_name=args.wandb_task_name,
         validate_every_n_steps=args.validate_every_n_steps,
+        num_gpus=args.num_gpus,
     )
 
     # Create model

@@ -111,7 +111,7 @@ class WhisperVQTrainer:
             logger=self.wandb_logger,
             callbacks=self.callbacks,
             num_nodes=int(os.environ.get("SLURM_NNODES", 1)),
-            devices=int(os.environ.get("SLURM_NTASKS_PER_NODE", 1)),
+            devices=int(self.config.num_gpus),
         )
 
     def train(self, model, train_dataset, val_datasets):

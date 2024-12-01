@@ -11,3 +11,4 @@ wandb>=0.12.10
 librosa
 soundfile
 black
+evaluate
