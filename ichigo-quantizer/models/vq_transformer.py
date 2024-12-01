@@ -198,19 +198,23 @@ class RQBottleneckTransformer(nn.Module):
 
             # Get final logits and compute loss
             logits = self.whmodel[0].decoder(input_toks_2d, x)
-            loss = self._compute_loss(logits, output_toks.squeeze(1), teacher_logits)
+            loss, list_loss = self._compute_loss(
+                logits, output_toks.squeeze(1), teacher_logits
+            )
         else:
             # No quantization mode
             input_toks_2d = input_toks.squeeze(1)
             logits = self.whmodel[0].decoder(input_toks_2d, embs)
-            loss = self._compute_loss(logits, output_toks.squeeze(1), teacher_logits)
+            loss, list_loss = self._compute_loss(
+                logits, output_toks.squeeze(1), teacher_logits
+            )
             loss = loss + self.fake_parameter
 
         # Update validation metrics if not training
         if not self.training:
             self._update_validation_metrics(logits, output_toks.squeeze(1))
 
-        return None, logits, loss
+        return list_loss, logits, loss
 
     def _process_quantization(self, embs, mask):
         """
@@ -283,7 +287,7 @@ class RQBottleneckTransformer(nn.Module):
         if not self.no_quantize:
             loss += self.commit_loss
 
-        return loss
+        return loss, [self.ce_loss, self.kl_loss, self.commit_loss]
 
     def _update_validation_metrics(self, logits, output_toks):
         """Update validation metrics"""

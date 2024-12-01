@@ -1,5 +1,7 @@
 import torch
+import torch._dynamo
 import lightning.pytorch as pl
+import pandas as pd
 from models.vq_transformer import RQBottleneckTransformer
 from trainer.wer_metrics import compute_wer_cer
 
@@ -26,8 +28,6 @@ class WhisperVQModule(pl.LightningModule):
         Disables DDP optimization and applies model-specific training optimizations.
         """
         if self.config.torch_compile:
-            import torch._dynamo
-
             torch._dynamo.config.optimize_ddp = False
             if hasattr(self.model, "optimize_training"):
                 self.model.optimize_training()
@@ -139,60 +139,105 @@ class WhisperVQModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         """
         Perform a single training step.
+
+        Args:
+            batch: Tuple of (samples, mask, input_toks, output_toks)
+            batch_idx: Index of current batch
+
+        Returns:
+            loss: Total loss value for optimization
         """
         samples, mask, input_toks, output_toks = batch
-        _, logits, loss = self.model(samples, mask, input_toks, output_toks)
+        list_loss, logits, loss = self.model(samples, mask, input_toks, output_toks)
 
-        # Log standard metrics
-        self.log("train_loss", loss, sync_dist=True, prog_bar=True)
+        metrics = {
+            # Loss metrics
+            "loss/total_train": loss,
+            "loss/ce_loss": list_loss[0],
+            "loss/kl_loss": list_loss[1],
+            "loss/commit_loss": list_loss[2],
+        }
 
-        # Log codebook utilization
+        # Add codebook metrics
         if hasattr(self.model, "get_codebook_stats"):
             stats = self.model.get_codebook_stats()
             if stats:
-                self.log(
-                    "codebook/used_codes",
-                    stats["used_codes"],
-                    sync_dist=True,
-                    prog_bar=True,
+                metrics.update(
+                    {
+                        "codebook/used_codes": stats["used_codes"],
+                        "codebook/utilization": stats["utilization"],
+                    }
                 )
-                self.log(
-                    "codebook/utilization",
-                    stats["utilization"],
-                    sync_dist=True,
-                    prog_bar=True,
-                )
+
+        # Log all metrics at once
+        self.log_dict(
+            metrics,
+            sync_dist=True,
+            prog_bar=True,
+            on_step=True,
+            on_epoch=True,  # Also aggregate across epochs
+        )
 
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        """
+        Perform a validation step.
+
+        Args:
+            batch: Tuple of (samples, mask, input_toks, output_toks)
+            batch_idx: Index of current batch
+            dataloader_idx: Index of dataloader when using multiple validation sets
+        """
         samples, mask, input_toks, output_toks = batch
         _, logits, loss = self.model(samples, mask, input_toks, output_toks)
 
+        # Base metrics for all validation dataloaders
         metrics = {
-            f"val_loss_{dataloader_idx}": loss.item(),
-            f"val_entropy_{dataloader_idx}": self._calculate_entropy(logits),
+            f"val/loss_{dataloader_idx}": loss.item(),
+            f"val/entropy_{dataloader_idx}": self._calculate_entropy(logits),
         }
 
+        # Additional metrics for primary validation set
         if dataloader_idx == 0:
-            metrics["val_loss"] = loss.item()
+            metrics.update(
+                {
+                    "val/loss": loss.item(),  # Main validation loss
+                    "val/entropy": self._calculate_entropy(logits),
+                }
+            )
 
-            # Add codebook utilization metrics for validation
+            # Add codebook metrics if available
             if hasattr(self.model, "get_codebook_stats"):
                 stats = self.model.get_codebook_stats()
                 if stats:
-                    metrics["val_codebook_utilization"] = stats["utilization"]
-                    metrics["val_used_codes"] = stats["used_codes"]
+                    metrics.update(
+                        {
+                            "val/codebook_utilization": stats["utilization"],
+                            "val/used_codes": stats["used_codes"],
+                        }
+                    )
 
         # Log all metrics
-        self.log_dict(metrics, sync_dist=True, prog_bar=True)
+        self.log_dict(
+            metrics,
+            sync_dist=True,
+            prog_bar=True,
+            on_step=False,  # Validation metrics typically logged per epoch
+            on_epoch=True,
+        )
 
     def test_step(self, batch, batch_idx):
         """
         Perform a test step and collect results in DataFrame.
-        """
-        import pandas as pd
 
+        Args:
+            batch: Tuple of (samples, mask, input_toks, output_toks)
+            batch_idx: Index of current batch
+
+        Returns:
+            dict: Test metrics including loss, WER, CER, and entropy
+        """
         samples, mask, input_toks, output_toks = batch
 
         # Forward pass
@@ -222,7 +267,7 @@ class WhisperVQModule(pl.LightningModule):
         wer, cer = self._calculate_wer_cer(pred_ids, output_toks)
         entropy = self._calculate_entropy(logits)
 
-        # Store results in DataFrame
+        # Store detailed results for later analysis
         batch_results = pd.DataFrame(
             {
                 "batch_idx": batch_idx,
@@ -240,22 +285,34 @@ class WhisperVQModule(pl.LightningModule):
             self.test_results = []
         self.test_results.append(batch_results)
 
-        # Log metrics as before
+        # Prepare metrics for logging
         metrics = {
-            "test_loss": loss.item(),
-            "test_wer": wer,
-            "test_cer": cer,
-            "test_entropy": entropy,
+            "test/loss": loss.item(),
+            "test/wer": wer,
+            "test/cer": cer,
+            "test/entropy": entropy,
         }
 
+        # Add codebook metrics if available
         if hasattr(self.model, "get_codebook_stats"):
             stats = self.model.get_codebook_stats()
             if stats:
-                metrics["test_codebook_utilization"] = stats["utilization"]
-                metrics["test_used_codes"] = stats["used_codes"]
+                metrics.update(
+                    {
+                        "test/codebook_utilization": stats["utilization"],
+                        "test/used_codes": stats["used_codes"],
+                    }
+                )
 
-        self.log_dict(metrics, sync_dist=True)
-        print(metrics)
+        # Log all metrics
+        self.log_dict(
+            metrics,
+            sync_dist=True,
+            on_step=False,  # Test metrics typically logged once
+            on_epoch=True,
+            prog_bar=True,
+        )
+
         return metrics
 
     def _calculate_wer_cer(self, pred_ids, target_ids):
@@ -285,9 +342,29 @@ class WhisperVQModule(pl.LightningModule):
         return compute_wer_cer(predictions, targets, tokenizer=self.model.tokenizer)
 
     def _calculate_entropy(self, logits):
-        """Calculate entropy of predictions"""
-        probs = torch.softmax(logits, dim=-1)
-        return -torch.sum(probs * torch.log2(probs + 1e-10), dim=-1).mean().item()
+        """
+        Calculate entropy of predictions to measure uncertainty in model's output distribution.
+
+        Higher entropy = more uncertain/random predictions (max log2(vocab_size))
+        Lower entropy = more confident predictions
+
+        Args:
+            logits: Raw model outputs [batch_size, sequence_length, vocab_size]
+
+        Returns:
+            float: Average entropy across batch
+        """
+        # Convert logits to probabilities using softmax
+        probs = torch.softmax(logits, dim=-1)  # [batch, seq_len, vocab_size]
+
+        # Calculate entropy: -Σ(p * log2(p))
+        # 1e-10 is added for numerical stability to avoid log(0)
+        entropy = -torch.sum(
+            probs * torch.log2(probs + 1e-10), dim=-1
+        )  # [batch, seq_len]
+
+        # Return mean entropy across batch
+        return entropy.mean().item()
 
     def load_from_checkpoint(self, checkpoint_path):
         """

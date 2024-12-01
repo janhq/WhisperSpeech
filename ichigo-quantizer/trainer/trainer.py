@@ -61,13 +61,50 @@ class WhisperVQTrainer:
 
         Sets up the project name with optional suffix and generates a unique run name.
         The project name format is: WhisperSpeech-{task_name}[-{suffix}]
+        Logs configuration parameters for experiment tracking.
         """
-        project = f"WhisperSpeech-{self.config.wandb_task_name or self.config.task}"
+        project = f"{self.config.wandb_task_name or self.config.task}"
         if self.config.wandb_suffix:
             project += f"-{self.config.wandb_suffix}"
 
         self.run_name = generate_run_name()
         self.wandb_logger = WandbLogger(project=project, name=self.run_name)
+
+        # Log configuration parameters
+        config_dict = {
+            # Training parameters
+            "training": self.config.to_hparams(),
+            # VQ specific parameters
+            "vq": {
+                "init_std": self.config.vq_config.init_std,
+                "embeddings_std": self.config.vq_config.embeddings_std,
+                "embeddings_lr_scale": self.config.vq_config.embeddings_lr_scale,
+                "query_mult": self.config.vq_config.query_mult,
+                "rope": self.config.vq_config.rope,
+                "mask_embs": self.config.vq_config.mask_embs,
+                "output_mult": self.config.vq_config.output_mult,
+                "downsample_conv": self.config.vq_config.downsample_conv,
+                "downsample_mean": self.config.vq_config.downsample_mean,
+                "codebook_dim": self.config.vq_config.codebook_dim,
+                "codebook_decay": self.config.vq_config.codebook_decay,
+            },
+            # Dataset parameters
+            "dataset": {
+                "training_data": self.config.training_data,
+                "validation_data": self.config.validation_data,
+                "dataset_config": self.config.dataset_config,
+            },
+            # Hardware settings
+            "hardware": {
+                "num_workers": self.config.num_workers,
+                "precision": self.config.precision,
+                "torch_compile": self.config.torch_compile,
+                "strategy": self.config.strategy,
+                "num_gpus": self.config.num_gpus,
+            },
+        }
+
+        self.wandb_logger.experiment.config.update(config_dict)
 
     def _setup_callbacks(self):
         """
@@ -112,6 +149,7 @@ class WhisperVQTrainer:
             callbacks=self.callbacks,
             num_nodes=int(os.environ.get("SLURM_NNODES", 1)),
             devices=int(self.config.num_gpus),
+            log_every_n_steps=1,
         )
 
     def train(self, model, train_dataset, val_datasets):
