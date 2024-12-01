@@ -61,6 +61,9 @@ class RQBottleneckTransformer(nn.Module):
 
     def _init_attributes(self, params):
         """Initialize model attributes from parameters"""
+        # Store initialization arguments
+        self.__stored_args__ = {k: v for k, v in params.items() if k != "self"}
+
         self.width = params["n_head"] * params["head_width"]
         self.base_width = 3 * params["head_width"]
         for k, v in params.items():
