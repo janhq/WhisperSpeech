@@ -20,12 +20,11 @@ def parse_args():
     parser.add_argument("--training-data", type=str, required=True)
     parser.add_argument("--validation-data", type=str, required=True)
     parser.add_argument("--tunables", type=str, default="")
-    parser.add_argument("--num-gpus", type=int, default=1)  
+    parser.add_argument("--num-gpus", type=int, default=1)
     parser.add_argument(
         "--validate-every-n-steps",
         type=int,
         default=100,
-        help="Run validation every N training steps",
     )
     parser.add_argument("--wandb-task-name", type=str, default=None)
     return parser.parse_args()

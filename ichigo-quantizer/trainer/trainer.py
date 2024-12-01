@@ -194,11 +194,34 @@ class WhisperVQTrainer:
         Returns:
             dict: Test metrics including WER and entropy
         """
-        test_loader = wds.WebLoader(
-            test_dataset,
-            num_workers=self.config.num_workers,
-            batch_size=self.config.batch_size,
+        try:
+            dataset_length = len(test_dataset)
+        except Exception:
+            temp_loader = wds.WebLoader(test_dataset).unbatched()
+            dataset_length = sum(1 for _ in temp_loader)
+
+        num_batches = dataset_length // self.config.batch_size
+        if dataset_length % self.config.batch_size != 0:
+            num_batches += 1
+
+        test_loader = (
+            wds.WebLoader(
+                test_dataset,
+                num_workers=self.config.num_workers,
+                batch_size=None,
+                persistent_workers=self.config.num_workers > 0,
+            )
+            .unbatched()
+            .batched(self.config.batch_size)
+            .with_length(num_batches)
         )
+
+        # Log test dataset info
+        if rank_zero_only.rank == 0:
+            print(f"\nTest Dataset Info:")
+            print(f"Total samples: {dataset_length}")
+            print(f"Batch size: {self.config.batch_size}")
+            print(f"Number of batches: {num_batches}")
 
         lightning_module = WhisperVQModule(model, self.config)
 
