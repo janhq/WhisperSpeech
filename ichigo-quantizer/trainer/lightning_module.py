@@ -18,16 +18,6 @@ class WhisperVQModule(pl.LightningModule):
         Called at the beginning of training.
         Sets up the model and applies compilation if configured.
         """
-        # Verify codebook parameters
-        print("\nVerifying model parameters before training:")
-        for name, param in self.model.named_parameters():
-            if "codebook" in name:
-                print(f"{name}:")
-                print(f"  Shape: {param.shape}")
-                print(f"  Device: {param.device}")
-                print(f"  Requires grad: {param.requires_grad}")
-                print(f"  Has grad: {param.grad is not None}")
-
         if hasattr(self.model, "setup"):
             self.model.setup(self.device)
         self._maybe_compile_model()
