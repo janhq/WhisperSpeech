@@ -99,7 +99,6 @@ class RQBottleneckTransformer(nn.Module):
         # Adjust vq_codes if using mask embeddings
         if self.config.mask_embs:
             vq_codes = self.vq_codes + 1
-
         # Initialize ResidualVQ
         self.rq = ResidualVQ(
             dim=self.width,
@@ -222,13 +221,6 @@ class RQBottleneckTransformer(nn.Module):
     def _process_quantization(self, embs, mask):
         """
         Process embeddings through the quantization pipeline.
-
-        Args:
-            embs (torch.Tensor): Input embeddings [B, T, D]
-            mask (torch.Tensor): Attention mask [B, 1, T]
-
-        Returns:
-            torch.Tensor: Processed and quantized embeddings
         """
         x = self.downsample_embeddings(embs)
         x = x + self.mlp(self.mlp_ln(x))
@@ -251,13 +243,15 @@ class RQBottleneckTransformer(nn.Module):
             project_out = (
                 getattr(self.rq, "project_out", None) or self.rq.layers[0].project_out
             )
+            # Use vq_codes - 1 to get the last index (mask token)
+            mask_token_idx = self.vq_codes - 1
             # Reshape mask to match tensor dimensions
             mask_reshaped = mask.squeeze(1).unsqueeze(-1)  # [B, T, 1]
             x = torch.where(
                 mask_reshaped,
                 x,
                 project_out(
-                    self.rq.layers[0]._codebook.embed[0, self.vq_codes]
+                    self.rq.layers[0]._codebook.embed[0, mask_token_idx]
                 ).unsqueeze(0),
             )
 
@@ -269,7 +263,7 @@ class RQBottleneckTransformer(nn.Module):
 
     def _compute_loss(self, logits, output_toks, teacher_logits):
         """
-        Compute the total loss combining CE, KL, and commitment losses.
+        Compute the total loss combining CE, KL, commitment, and codebook regularization losses.
 
         Args:
             logits (torch.Tensor): Model predictions
@@ -277,20 +271,49 @@ class RQBottleneckTransformer(nn.Module):
             teacher_logits (torch.Tensor): Teacher model logits
 
         Returns:
-            torch.Tensor: Combined loss value
+            tuple: (total_loss, [ce_loss, kl_loss, commit_loss, codebook_reg_loss])
         """
+        # Base losses
         self.ce_loss = self.ce_lossf(
             logits.view(-1, logits.shape[-1]), output_toks.view(-1)
         )
         self.kl_loss = self.kl_lossf(
             F.log_softmax(logits, dim=-1), F.softmax(teacher_logits, dim=-1)
         )
+
+        # Initialize total loss
         loss = self.ce_loss + self.kl_loss_mul * self.kl_loss
 
+        # Handle VQ-specific losses
         if not self.no_quantize:
-            loss += self.commit_loss
+            # Commitment loss from VQ layer
+            loss = loss + self.commit_loss
 
-        return loss, [self.ce_loss, self.kl_loss, self.commit_loss]
+            # Add codebook regularization loss
+            self.codebook_reg_loss = 0.0
+            for layer in self.rq.layers:
+                # L2 regularization on codebook entries
+                codebook_l2 = (layer._codebook.embed**2).mean()
+
+                # Encourage diversity in codebook usage
+                codebook_probs = F.softmax(layer._codebook.cluster_size, dim=-1)
+                entropy_reg = -(
+                    codebook_probs * torch.log(codebook_probs + 1e-7)
+                ).mean()
+
+                # Combine regularization terms
+                self.codebook_reg_loss += codebook_l2 * 1e-4 - entropy_reg * 1e-2
+
+            loss = loss + self.codebook_reg_loss
+
+            return loss, [
+                self.ce_loss,
+                self.kl_loss,
+                self.commit_loss,
+                self.codebook_reg_loss,
+            ]
+        else:
+            return loss, [self.ce_loss, self.kl_loss, torch.tensor(0.0)]
 
     def _update_validation_metrics(self, logits, output_toks):
         """Update validation metrics"""
@@ -396,22 +419,57 @@ class RQBottleneckTransformer(nn.Module):
         )
 
     @classmethod
-    def load_model(cls, ref, repo_id=None, filename=None, local_filename=None):
-        """Load model from file or Hugging Face Hub"""
-        if repo_id is None and filename is None and local_filename is None:
-            if ":" in ref:
-                repo_id, filename = ref.split(":", 1)
-            else:
-                local_filename = ref
+    def load_model(
+        cls,
+        ref,
+        repo_id=None,
+        filename=None,
+        local_dir=None,
+        local_filename=None,
+    ):
+        """Load model from file or Hugging Face Hub.
 
-        if not local_filename:
-            local_filename = hf_hub_download(repo_id=repo_id, filename=filename)
+        Args:
+            ref (str): Either a local path or "repo_id:filename" format
+            repo_id (str, optional): Hugging Face repository ID
+            filename (str, optional): Filename in the repository
+            local_dir (str, optional): Local directory for downloads
+            local_filename (str, optional): Direct path to local file
 
-        spec = torch.load(local_filename)
-        model = cls(**spec["config"], config=spec.get("config", None))
-        model.load_state_dict(spec["state_dict"])
-        model.eval()
-        return model
+        Returns:
+            RQBottleneckTransformer: Loaded model instance
+
+        Raises:
+            ValueError: If the model file or config is invalid
+            FileNotFoundError: If the file cannot be found
+        """
+        try:
+            # Parse reference string
+            if repo_id is None and filename is None and local_filename is None:
+                if ":" in ref:
+                    repo_id, filename = ref.split(":", 1)
+                else:
+                    local_filename = ref
+
+            # Download or use local file
+            if not local_filename:
+                local_filename = hf_hub_download(
+                    repo_id=repo_id, filename=filename, local_dir=local_dir
+                )
+
+            # Load and validate spec
+            spec = torch.load(local_filename)
+            if "config" not in spec or "state_dict" not in spec:
+                raise ValueError("Invalid model file format")
+
+            # Initialize and load model
+            model = cls(**spec["config"], config=spec.get("config", None))
+            model.load_state_dict(spec["state_dict"])
+            model.eval()
+            return model
+
+        except Exception as e:
+            raise ValueError(f"Failed to load model: {str(e)}") from e
 
     def save_model(self, fname, store_parameters=True):
         """Save model to file"""
@@ -425,7 +483,7 @@ class RQBottleneckTransformer(nn.Module):
 
     def get_codebook_stats(self):
         """Calculate codebook utilization statistics"""
-        if hasattr(self, "_codebook_usage"):  # Changed from self.rq to self
+        if hasattr(self, "_codebook_usage"):
             total_codes = self.vq_codes
             used_codes = (self._codebook_usage > 0).sum().item()
             utilization = used_codes / total_codes * 100
@@ -441,3 +499,57 @@ class RQBottleneckTransformer(nn.Module):
                 "entropy": entropy,
             }
         return None
+
+    def extend_codebook(self, new_size=1024):
+        """
+        Extend codebook size while preserving existing codes
+        Args:
+            new_size: New size of codebook (e.g., 1024)
+        """
+        layer = self.rq.layers[0]
+        original_codebook = layer._codebook.embed
+        batch_size, original_size, embed_dim = original_codebook.shape
+
+        # Create new codebook with expanded size
+        new_codebook = torch.empty(
+            (batch_size, new_size, embed_dim),
+            device=original_codebook.device,
+            dtype=original_codebook.dtype,
+        )
+
+        # Copy existing codes
+        new_codebook[:, :original_size, :] = (
+            original_codebook.data
+        )  # Use .data to copy values
+
+        # Calculate mean and std of existing codes
+        mean_embedding = original_codebook.mean(dim=1, keepdim=True)
+        std = original_codebook.std(dim=1, keepdim=True)
+
+        # Initialize new codes with mean + small random noise
+        noise = (
+            torch.randn(
+                (batch_size, new_size - original_size, embed_dim),
+                device=original_codebook.device,
+                dtype=original_codebook.dtype,
+            )
+            * std
+            * 0.1
+        )
+        new_codebook[:, original_size:, :] = mean_embedding + noise
+
+        # Properly register new parameters in the VQ layer
+        layer._codebook.embed = nn.Parameter(new_codebook)
+        layer._codebook.cluster_size = nn.Parameter(
+            torch.zeros((batch_size, new_size), device=original_codebook.device)
+        )
+        layer._codebook.embed_avg = nn.Parameter(torch.zeros_like(new_codebook))
+
+        # Important: Register these parameters with the module
+        layer._codebook.register_parameter("embed", layer._codebook.embed)
+        layer._codebook.register_parameter("cluster_size", layer._codebook.cluster_size)
+        layer._codebook.register_parameter("embed_avg", layer._codebook.embed_avg)
+
+        # Update model parameters
+        self.vq_codes = new_size
+        self.register_buffer("_codebook_usage", torch.zeros(new_size))
