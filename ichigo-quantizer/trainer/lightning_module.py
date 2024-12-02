@@ -167,9 +167,8 @@ class WhisperVQModule(pl.LightningModule):
             sync_dist=True,
             prog_bar=True,
             on_step=True,
-            on_epoch=True,  # Also aggregate across epochs
+            on_epoch=True,
         )
-
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):

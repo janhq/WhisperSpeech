@@ -222,11 +222,10 @@ class RQBottleneckTransformer(nn.Module):
     def _process_quantization(self, embs, mask):
         """
         Process embeddings through the quantization pipeline.
-
+        
         Args:
             embs (torch.Tensor): Input embeddings [B, T, D]
             mask (torch.Tensor): Attention mask [B, 1, T]
-
         Returns:
             torch.Tensor: Processed and quantized embeddings
         """
@@ -270,12 +269,10 @@ class RQBottleneckTransformer(nn.Module):
     def _compute_loss(self, logits, output_toks, teacher_logits):
         """
         Compute the total loss combining CE, KL, and commitment losses.
-
         Args:
             logits (torch.Tensor): Model predictions
             output_toks (torch.Tensor): Target tokens
             teacher_logits (torch.Tensor): Teacher model logits
-
         Returns:
             torch.Tensor: Combined loss value
         """
@@ -289,7 +286,6 @@ class RQBottleneckTransformer(nn.Module):
 
         if not self.no_quantize:
             loss += self.commit_loss
-
         return loss, [self.ce_loss, self.kl_loss, self.commit_loss]
 
     def _update_validation_metrics(self, logits, output_toks):
@@ -396,22 +392,57 @@ class RQBottleneckTransformer(nn.Module):
         )
 
     @classmethod
-    def load_model(cls, ref, repo_id=None, filename=None, local_filename=None):
-        """Load model from file or Hugging Face Hub"""
-        if repo_id is None and filename is None and local_filename is None:
-            if ":" in ref:
-                repo_id, filename = ref.split(":", 1)
-            else:
-                local_filename = ref
+    def load_model(
+        cls,
+        ref,
+        repo_id=None,
+        filename=None,
+        local_dir=None,
+        local_filename=None,
+    ):
+        """Load model from file or Hugging Face Hub.
 
-        if not local_filename:
-            local_filename = hf_hub_download(repo_id=repo_id, filename=filename)
+        Args:
+            ref (str): Either a local path or "repo_id:filename" format
+            repo_id (str, optional): Hugging Face repository ID
+            filename (str, optional): Filename in the repository
+            local_dir (str, optional): Local directory for downloads
+            local_filename (str, optional): Direct path to local file
 
-        spec = torch.load(local_filename)
-        model = cls(**spec["config"], config=spec.get("config", None))
-        model.load_state_dict(spec["state_dict"])
-        model.eval()
-        return model
+        Returns:
+            RQBottleneckTransformer: Loaded model instance
+
+        Raises:
+            ValueError: If the model file or config is invalid
+            FileNotFoundError: If the file cannot be found
+        """
+        try:
+            # Parse reference string
+            if repo_id is None and filename is None and local_filename is None:
+                if ":" in ref:
+                    repo_id, filename = ref.split(":", 1)
+                else:
+                    local_filename = ref
+
+            # Download or use local file
+            if not local_filename:
+                local_filename = hf_hub_download(
+                    repo_id=repo_id, filename=filename, local_dir=local_dir
+                )
+
+            # Load and validate spec
+            spec = torch.load(local_filename)
+            if "config" not in spec or "state_dict" not in spec:
+                raise ValueError("Invalid model file format")
+
+            # Initialize and load model
+            model = cls(**spec["config"], config=spec.get("config", None))
+            model.load_state_dict(spec["state_dict"])
+            model.eval()
+            return model
+
+        except Exception as e:
+            raise ValueError(f"Failed to load model: {str(e)}") from e
 
     def save_model(self, fname, store_parameters=True):
         """Save model to file"""
@@ -425,7 +456,7 @@ class RQBottleneckTransformer(nn.Module):
 
     def get_codebook_stats(self):
         """Calculate codebook utilization statistics"""
-        if hasattr(self, "_codebook_usage"):  # Changed from self.rq to self
+        if hasattr(self, "_codebook_usage"):
             total_codes = self.vq_codes
             used_codes = (self._codebook_usage > 0).sum().item()
             utilization = used_codes / total_codes * 100

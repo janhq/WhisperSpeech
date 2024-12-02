@@ -104,7 +104,7 @@ class WhisperVQTrainer:
             },
         }
 
-        self.wandb_logger.experiment.config.update(config_dict)
+        # self.wandb_logger.experiment.config.update(config_dict) #TODO: trick bypass ddp
 
     def _setup_callbacks(self):
         """
