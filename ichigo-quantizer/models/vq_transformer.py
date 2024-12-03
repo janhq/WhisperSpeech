@@ -222,7 +222,7 @@ class RQBottleneckTransformer(nn.Module):
     def _process_quantization(self, embs, mask):
         """
         Process embeddings through the quantization pipeline.
-        
+
         Args:
             embs (torch.Tensor): Input embeddings [B, T, D]
             mask (torch.Tensor): Attention mask [B, 1, T]
@@ -304,29 +304,21 @@ class RQBottleneckTransformer(nn.Module):
         Extract embeddings and logits from teacher model.
 
         Args:
-            samples (torch.Tensor): Input audio samples
-            input_toks (torch.Tensor): Input tokens
-            output_toks (torch.Tensor): Target tokens
+            samples (torch.Tensor): Input audio samples (B, 16000 * T)
+            input_toks (torch.Tensor): Input tokens (B, MaxToks)
+            output_toks (torch.Tensor): Target tokens (B, MaxToks)
 
         Returns:
             tuple: (embeddings, teacher_logits)
         """
-        samples_1d = samples.squeeze(1)
-        embs = self.whmodel[0].encoder(self.log_mel_spectrogram(samples_1d))
+        embs = self.whmodel[0].encoder(
+            self.log_mel_spectrogram(samples)
+        )  # [8, 1500, 1024]
 
-        input_toks_1d = input_toks.squeeze(1)
-
-        assert len(embs.shape) == 3, f"Expected embs to be 3D, got shape {embs.shape}"
-        assert (
-            len(input_toks_1d.shape) == 2
-        ), f"Expected input_toks to be 2D, got shape {input_toks.shape}"
-
-        teacher_logits = self.whmodel[0].decoder(input_toks_1d, embs)
-
+        teacher_logits = self.whmodel[0].decoder(input_toks, embs)  # [8, 200, 51865]
         # Create mask and apply it properly
         mask = (output_toks.squeeze(1) == -100).unsqueeze(-1)
-        teacher_logits = teacher_logits.masked_fill(mask, 0)
-
+        teacher_logits = teacher_logits.masked_fill(mask, 0)  # [8, 200, 51865]
         return embs, teacher_logits
 
     def downsample_embeddings(self, x):

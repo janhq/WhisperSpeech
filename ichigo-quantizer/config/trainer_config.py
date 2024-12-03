@@ -70,7 +70,7 @@ class TrainerConfig:
     # Model and optimization parameters
     vq_config: VQConfig = None
     lr_schedule: str = "linear"
-    monitored_metric: str = "val_loss"
+    monitored_metric: str = "val/loss"
 
     # Checkpoint handling
     resume_from: Optional[Path] = None

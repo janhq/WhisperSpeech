@@ -178,8 +178,9 @@ class WhisperDatasetAdapter(IterableDataset):
         )
 
         # Pad tokens
-        max_tokens = 200
+        max_tokens = 20  # TODO: don't hardcode this
         rpad = max_tokens - len(tokens)
+
         in_ttoks = F.pad(
             torch.tensor(tokens, dtype=torch.long),
             (0, rpad),
