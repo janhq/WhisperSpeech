@@ -245,12 +245,18 @@ class RQBottleneckTransformer(nn.Module):
         # Update codebook usage tracking (per step)
         if self.training:
             self._codebook_usage.zero_()
-            indices_flat = indices.view(-1)
-            unique_indices, counts = torch.unique(indices_flat, return_counts=True)
-            assert (
-                unique_indices < self.vq_codes + 1  # +1 for masked embeddings
-            ).all(), f"Found index >= {self.vq_codes}"
-            self._codebook_usage.scatter_add_(0, unique_indices, counts.float())
+            for sample_indices in indices:  # sample_indices shape: [750, 1]
+                sample_indices_flat = sample_indices.view(-1)
+                unique_indices, counts = torch.unique(
+                    sample_indices_flat, return_counts=True
+                )
+                assert (
+                    unique_indices < self.vq_codes + 1  # +1 for masked embeddings
+                ).all(), f"Found index >= {self.vq_codes}"
+
+                self._codebook_usage.scatter_add_(
+                    0, unique_indices, counts.float() / indices.size(0)
+                )
 
         # Post-quantization processing
         x = quantized.repeat_interleave(self.downsample, -2)
