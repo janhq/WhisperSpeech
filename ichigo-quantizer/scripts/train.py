@@ -142,7 +142,7 @@ def main():
 
     # Create and run trainer
     trainer = WhisperVQTrainer(trainer_config)
-    trainer.train(model, train_dataset, [val_dataset])
+    trainer.train(model, train_dataset, val_dataset)
 
 
 if __name__ == "__main__":
