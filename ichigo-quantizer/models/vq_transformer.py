@@ -72,7 +72,9 @@ class RQBottleneckTransformer(nn.Module):
         self.stoks_len = 1500 // self.downsample
         self.stoks_per_sec = self.stoks_len // 30
         self.whmodel = None
-        self.positions = torch.arange(0, 1500, dtype=torch.long)
+        self.positions = torch.arange(
+            0, 1500, dtype=torch.long
+        )  # TODO: hardcorded this? calculated from whisper? -> (80, n_frames)
 
     def _init_model_components(self):
         """Initialize the model's neural network components"""
@@ -96,7 +98,7 @@ class RQBottleneckTransformer(nn.Module):
         else:
             self.downsample_conv = None
 
-        # Adjust vq_codes if using mask embeddings
+        # Adjust vq_codes if using mask embeddings - force embeddings corresponding to the input audio padding to a constant value
         if self.config.mask_embs:
             vq_codes = self.vq_codes + 1
 
@@ -118,7 +120,9 @@ class RQBottleneckTransformer(nn.Module):
         """Initialize transformer-specific components"""
         qk_scale = self.config.query_mult * 8 / math.sqrt(self.head_width)
 
-        self.positional_embedding = nn.Embedding(1500, self.width)
+        self.positional_embedding = nn.Embedding(
+            1500, self.width
+        )  # FIXME: should be self.stoks_len  -> 1500 ~ length of semantic tokens
 
         self._out_blocks = nn.Sequential(
             *[
@@ -224,23 +228,29 @@ class RQBottleneckTransformer(nn.Module):
         Process embeddings through the quantization pipeline.
 
         Args:
-            embs (torch.Tensor): Input embeddings [B, T, D]
-            mask (torch.Tensor): Attention mask [B, 1, T]
+            embs (torch.Tensor): Input embeddings (8, 1500, 1024)
+            mask (torch.Tensor): Attention mask (8, 1500)
         Returns:
             torch.Tensor: Processed and quantized embeddings
         """
         x = self.downsample_embeddings(embs)
-        x = x + self.mlp(self.mlp_ln(x))
+        x = x + self.mlp(self.mlp_ln(x))  # (8, 750, 1024)
 
         # VQ bottleneck
         quantized, indices, self.commit_loss = self.rq(x)
+        # (8, 750, 1024), (8, 750, 1), (1, 1)
+        # indices of seq len, range [0, vq_codes (w/ mask code)]
         self.commit_loss = self.commit_loss.mean()
 
-        # Update codebook usage tracking
-        unique_indices = torch.unique(indices)
-        self._codebook_usage.scatter_add_(
-            0, unique_indices, torch.ones_like(unique_indices, dtype=torch.float)
-        )
+        # Update codebook usage tracking (per step)
+        if self.training:
+            self._codebook_usage.zero_()
+            indices_flat = indices.view(-1)
+            unique_indices, counts = torch.unique(indices_flat, return_counts=True)
+            assert (
+                unique_indices < self.vq_codes + 1  # +1 for masked embeddings
+            ).all(), f"Found index >= {self.vq_codes}"
+            self._codebook_usage.scatter_add_(0, unique_indices, counts.float())
 
         # Post-quantization processing
         x = quantized.repeat_interleave(self.downsample, -2)
@@ -250,18 +260,10 @@ class RQBottleneckTransformer(nn.Module):
             project_out = (
                 getattr(self.rq, "project_out", None) or self.rq.layers[0].project_out
             )
-            # Reshape mask to match tensor dimensions
-            mask_reshaped = mask.squeeze(1).unsqueeze(-1)  # [B, T, 1]
-            x = torch.where(
-                mask_reshaped,
-                x,
-                project_out(
-                    self.rq.layers[0]._codebook.embed[0, self.vq_codes]
-                ).unsqueeze(0),
-            )
+            x[~mask] = project_out(self.rq.layers[0]._codebook.embed[0, self.vq_codes])
 
         # Add positional embeddings and apply transformer
-        x = x + self.positional_embedding(self.positions.to(x.device))
+        x = x + self.positional_embedding(self.positions.to("cuda"))
         x = self.ln_post(self.out_blocks(x))
 
         return x
@@ -311,6 +313,7 @@ class RQBottleneckTransformer(nn.Module):
         Returns:
             tuple: (embeddings, teacher_logits)
         """
+        # self.log_mel_spectrogram(samples).shape = [8, 80, 1500]
         embs = self.whmodel[0].encoder(
             self.log_mel_spectrogram(samples)
         )  # [8, 1500, 1024]
@@ -336,7 +339,7 @@ class RQBottleneckTransformer(nn.Module):
                 x.transpose(-1, -2)
             ).transpose(-2, -1)
         elif self.config.downsample_mean:
-            bs, slen, depth = x.shape
+            bs, slen, depth = x.shape  # [8, 1500, 1024]
             return x.reshape(bs, slen // self.downsample, self.downsample, depth).mean(
                 -2
             )
@@ -447,20 +450,18 @@ class RQBottleneckTransformer(nn.Module):
         )
 
     def get_codebook_stats(self):
-        """Calculate codebook utilization statistics"""
-        if hasattr(self, "_codebook_usage"):
-            total_codes = self.vq_codes
-            used_codes = (self._codebook_usage > 0).sum().item()
-            utilization = used_codes / total_codes * 100
+        """Calculate codebook utilization statistics for current batch"""
+        total_codes = self.vq_codes + 1  # +1 for masked embeddings
+        total_usage = self._codebook_usage.sum().item()  # 750 * 8
+        used_codes = (self._codebook_usage > 0).sum().item()
+        utilization = used_codes / total_codes * 100
 
-            # Calculate usage distribution statistics
-            usage_dist = self._codebook_usage / self._codebook_usage.sum()
-            entropy = -(usage_dist * torch.log2(usage_dist + 1e-7)).sum().item()
+        usage_dist = self._codebook_usage / (total_usage + 1e-7)
+        entropy = -(usage_dist * torch.log2(usage_dist + 1e-7)).sum().item()
 
-            return {
-                "total_codes": total_codes,
-                "used_codes": used_codes,
-                "utilization": utilization,
-                "entropy": entropy,
-            }
-        return None
+        return {
+            "used_codes": used_codes,
+            "utilization": utilization,
+            "entropy": entropy,
+            "usage_per_code": self._codebook_usage.cpu().tolist(),
+        }

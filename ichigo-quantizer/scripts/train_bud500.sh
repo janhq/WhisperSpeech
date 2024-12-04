@@ -1,5 +1,5 @@
 # Bud500: 634158 train, 7500 val, 7500 test                                                                                                                                                                         ─╯
-CUDA_VISIBLE_DEVICES=0 python -m scripts.train \
+WANDB_ENTITY="janai" CUDA_VISIBLE_DEVICES=0 python -m scripts.train \
     --task "vq_stoks medium-vi-2d-1024c-dim64" \
     --batch-size 42 \
     --iterations 15100 \
