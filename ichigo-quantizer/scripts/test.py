@@ -9,7 +9,7 @@ from config.trainer_config import TrainerConfig
 from config.vq_config import VQConfig
 from models.factory import make_vq_model
 from trainer.trainer import WhisperVQTrainer
-from data.whisper_dataset import load_test_dataset
+from data.dataset import load_test_dataset
 from trainer.lightning_module import WhisperVQModule
 
 
@@ -26,10 +26,7 @@ def parse_args():
     )
     parser.add_argument("--language", type=str, default="vi", help="Language code")
     parser.add_argument(
-        "--batch-size", type=int, default=8, help="Batch size for evaluation"
-    )
-    parser.add_argument(
-        "--num-samples", type=int, default=None, help="Number of samples to evaluate"
+        "--batch-size", type=int, default=48, help="Batch size for evaluation"
     )
     return parser.parse_args()
 
@@ -51,23 +48,20 @@ def main():
 
     model.setup(device="cuda")
 
-    # Create test dataset
     test_dataset = load_test_dataset(
         dataset_dir=args.test_data,
         language=args.language,
         model=args.model_size,
-        num_samples=args.num_samples,
     )
 
-    # Create trainer and run evaluation
+    # Create trainer and get predictions
     trainer = WhisperVQTrainer(trainer_config)
-    results = trainer.test(model, test_dataset)
+    predictions_df = trainer.get_predictions(model, test_dataset)
 
-    # Print results
-    print("\nEvaluation Results:")
-    print(f"Test Loss: {results['test_loss']:.4f}")
-    print(f"Word Error Rate: {results['test_wer']:.2%}")
-    print(f"Entropy: {results['test_entropy']:.4f}")
+    # Save predictions
+    output_path = f"predictions_{Path(args.model_path).stem}.csv"
+    predictions_df.to_csv(output_path, index=False)
+    print(f"\nPredictions saved to: {output_path}")
 
 
 if __name__ == "__main__":
