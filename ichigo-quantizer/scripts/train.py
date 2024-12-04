@@ -10,7 +10,7 @@ from config.trainer_config import TrainerConfig
 from config.vq_config import VQConfig
 from models.factory import make_vq_model
 from trainer.trainer import WhisperVQTrainer
-from data.whisper_dataset import load_whisper_dataset
+from data.dataset import load_whisper_dataset
 
 
 def parse_args():

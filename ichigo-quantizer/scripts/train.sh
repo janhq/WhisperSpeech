@@ -1,8 +1,8 @@
 # Bud500: 634158 train, 7500 val, 7500 test                                                                                                                                                                         ─╯
 WANDB_ENTITY="janai" CUDA_VISIBLE_DEVICES=0 python -m scripts.train \
     --task "vq_stoks medium-vi-2d-1024c-dim64" \
-    --batch-size 42 \
-    --iterations 15100 \
+    --batch-size 80 \
+    --iterations 25000 \
     --validate-every-n-steps 4999 \
     --training-data "linhtran92/viet_bud500 --language vi" \
     --validation-data "linhtran92/viet_bud500 --language vi --validation" \
