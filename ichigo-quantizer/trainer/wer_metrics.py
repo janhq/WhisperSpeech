@@ -23,6 +23,10 @@ def preprocess_vietnamese_text(text: str) -> str:
     text = re.sub(r"\s+([.,!?])", r"\1", text)
     # Normalize quotes
     text = re.sub(r'["""]', '"', text)
+    # Lower
+    text = text.lower()
+    # Remove punctuation
+    text = re.sub(r'[.,!?;""\'\[\]\(\){}<>:،、]', '', text)
     # Trim
     return text.strip()
 
