@@ -82,7 +82,10 @@ class WhisperDataset(Dataset):
         tokenizer = whisper.tokenizer.get_tokenizer(
             True, language=self.language, task="transcribe"
         )
-        tokens = tokenizer.encode(text)
+
+        tokens = list(tokenizer.sot_sequence_including_notimestamps) + tokenizer.encode(
+            text
+        )
 
         # Pad tokens
         max_tokens = (
