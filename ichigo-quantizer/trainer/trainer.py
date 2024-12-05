@@ -2,6 +2,7 @@ import os
 import datetime
 from pathlib import Path
 import torch
+import pandas as pd
 import lightning.pytorch as pl
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
@@ -9,7 +10,9 @@ from lightning.fabric.utilities.rank_zero import rank_zero_only
 import webdataset as wds
 from config.trainer_config import TrainerConfig
 from trainer.lightning_module import WhisperVQModule
-from trainer.utils import generate_run_name, setup_dataloaders
+from trainer.utils import generate_run_name, setup_dataloaders, clean_whisper_text
+from torch.utils.data import DataLoader
+import whisper
 
 
 class WhisperVQTrainer:
@@ -117,7 +120,7 @@ class WhisperVQTrainer:
         self.callbacks = [
             ModelCheckpoint(
                 dirpath=self.config.checkpoint_dir,
-                filename=f"{self.config.task}-{self.run_name}-{{step}}-{{val_loss:.2f}}",
+                filename=f"{self.config.task}-{self.run_name}-{{step}}-{{val/loss:.2f}}",
                 monitor=self.config.monitored_metric,
                 save_top_k=3,
                 train_time_interval=datetime.timedelta(minutes=14),
@@ -183,71 +186,67 @@ class WhisperVQTrainer:
         if rank_zero_only.rank == 0:
             self._save_model(model)
 
-    def test(self, model, test_dataset):
-        """
-        Evaluate model on test dataset and save results.
+    def get_predictions(self, model, test_dataset):
+        whisper_model = whisper.load_model("medium")
+        whisper_model.to("cuda")
 
-        Args:
-            model: The WhisperVQ model to evaluate
-            test_dataset: Dataset for testing
-
-        Returns:
-            dict: Test metrics including WER and entropy
-        """
-        try:
-            dataset_length = len(test_dataset)
-        except Exception:
-            temp_loader = wds.WebLoader(test_dataset).unbatched()
-            dataset_length = sum(1 for _ in temp_loader)
-
-        num_batches = dataset_length // self.config.batch_size
-        if dataset_length % self.config.batch_size != 0:
-            num_batches += 1
-
-        test_loader = (
-            wds.WebLoader(
-                test_dataset,
-                num_workers=self.config.num_workers,
-                batch_size=None,
-                persistent_workers=self.config.num_workers > 0,
-            )
-            .unbatched()
-            .batched(self.config.batch_size)
-            .with_length(num_batches)
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=self.config.batch_size,
+            shuffle=False,
+            num_workers=self.config.num_workers,
+            pin_memory=True,
         )
+        results = []
+        model.eval()
+        model = model.cuda()
 
-        # Log test dataset info
-        if rank_zero_only.rank == 0:
-            print(f"\nTest Dataset Info:")
-            print(f"Total samples: {dataset_length}")
-            print(f"Batch size: {self.config.batch_size}")
-            print(f"Number of batches: {num_batches}")
+        with torch.no_grad():
+            for batch_idx, (samples, mask, input_toks, output_toks) in enumerate(
+                test_loader
+            ):
+                samples = samples.cuda()
+                mask = mask.cuda()
+                input_toks = input_toks.cuda()
+                output_toks = output_toks.cuda()
 
-        lightning_module = WhisperVQModule(model, self.config)
+                # Get predictions from your model
+                _, logits, _ = model(samples, mask, input_toks, output_toks)
 
-        results = self.trainer.test(
-            model=lightning_module, dataloaders=test_loader, verbose=True
-        )
+                # Process each sample in the batch
+                for i in range(len(samples)):
+                    # Your model predictions
+                    pred_tokens = logits[i].argmax(dim=-1)
+                    pred_text = model.tokenizer.decode(pred_tokens.tolist())
+                    pred_text = clean_whisper_text(pred_text)
 
-        if rank_zero_only.rank == 0:
-            print("\nTest Results:")
-            print(f"Loss: {results[0]['test_loss']:.4f}")
-            print(f"WER: {results[0]['test_wer']:.2%}")
-            print(f"Entropy: {results[0]['test_entropy']:.4f}")
+                    # Ground truth
+                    ground_truth = model.tokenizer.decode(
+                        output_toks[i][output_toks[i] != -100].tolist()
+                    )
+                    ground_truth = clean_whisper_text(ground_truth)
 
-            # Save detailed test results if available
-            if hasattr(lightning_module, "test_results"):
-                import pandas as pd
+                    # Get Whisper model prediction
+                    audio_sample = samples[i].cpu().numpy()
+                    whisper_result = whisper_model.transcribe(
+                        audio_sample,
+                        language="vi",
+                        task="transcribe",
+                        fp16=False,
+                    )
+                    whisper_text = clean_whisper_text(whisper_result["text"])
 
-                Path(self.config.task).mkdir(exist_ok=True, parents=True)
-                fname = f"{self.config.task}/{self.run_name}_test_results.csv"
-                final_results = pd.concat(
-                    lightning_module.test_results, ignore_index=True
-                )
-                final_results.to_csv(fname, index=False)
-                print(f"Saved detailed test results to: {fname}")
+                    result_dict = {
+                        "audio_id": f"audio_{batch_idx}_{i}",
+                        "ground_truth": ground_truth,
+                        "predicted_output": pred_text,
+                        "whisper_output": whisper_text,
+                    }
 
-        return results[0] if results else None
+                    print(result_dict)
+                    results.append(result_dict)
+
+        return pd.DataFrame(results)
 
     def _save_model(self, model):
         Path(self.config.task).mkdir(exist_ok=True, parents=True)

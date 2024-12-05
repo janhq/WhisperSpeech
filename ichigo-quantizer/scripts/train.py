@@ -10,7 +10,7 @@ from config.trainer_config import TrainerConfig
 from config.vq_config import VQConfig
 from models.factory import make_vq_model
 from trainer.trainer import WhisperVQTrainer
-from data.whisper_dataset import load_whisper_dataset
+from data.dataset import load_whisper_dataset
 
 
 def parse_args():
@@ -65,11 +65,17 @@ def load_state_dict_flexible(model, state_dict):
                     new_tensor[:, :old_size, ...] = state_dict[key]
 
                     # For remaining entries (512-1023)
-                    mean = state_dict[key].mean(dim=1, keepdim=True)
-                    std = state_dict[key].std(dim=1, keepdim=True)
-                    # Generate random values around the mean with small variance
-                    noise = torch.randn_like(new_tensor[:, old_size:, ...]) * std * 0.1
-                    new_tensor[:, old_size:, ...] = mean + noise
+                    # mean = state_dict[key].mean(dim=1, keepdim=True)
+                    # std = state_dict[key].std(dim=1, keepdim=True)
+                    # # Generate random values around the mean with small variance
+                    # noise = torch.randn_like(new_tensor[:, old_size:, ...]) * std * 0.1
+                    # new_tensor[:, old_size:, ...] = mean + noise
+                    # state_dict[key] = new_tensor
+
+                    # Kaiming initialization
+                    fan_in = new_tensor.size(-1)
+                    bound = torch.sqrt(torch.tensor(2.0 / fan_in))
+                    new_tensor[:, old_size:, ...].normal_(0, bound.item())
                     state_dict[key] = new_tensor
                 else:
                     # Truncate
@@ -136,7 +142,7 @@ def main():
 
     # Create and run trainer
     trainer = WhisperVQTrainer(trainer_config)
-    trainer.train(model, train_dataset, [val_dataset])
+    trainer.train(model, train_dataset, val_dataset)
 
 
 if __name__ == "__main__":

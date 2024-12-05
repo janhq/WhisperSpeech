@@ -1,3 +1,5 @@
+# Ichigo Quantizer 
+
 1. Create virtual enviroment
    ```bash
    python -m venv quant
