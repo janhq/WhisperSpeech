@@ -139,18 +139,23 @@ class WhisperVQModule(pl.LightningModule):
         Returns:
             loss: Total loss value for optimization
         """
-        samples, mask, input_toks, output_toks = batch
+        if isinstance(batch, (tuple, list)) and len(batch) == 2:
+            (samples, mask, input_toks, output_toks), dataset_weight = batch
+        else:
+            samples, mask, input_toks, output_toks = batch
+            dataset_weight = 1.0
+
         list_loss, logits, loss = self.model(samples, mask, input_toks, output_toks)
 
+        weighted_loss = loss * dataset_weight
+
         metrics = {
-            # Loss metrics
-            "loss/total_train": loss,
-            "loss/ce_loss": list_loss[0],
-            "loss/kl_loss": list_loss[1],
-            "loss/commit_loss": list_loss[2],
+            "loss/total_train": weighted_loss.item(),
+            "loss/ce_loss": (list_loss[0] * dataset_weight).mean().item(),
+            "loss/kl_loss": (list_loss[1] * dataset_weight).mean().item(),
+            "loss/commit_loss": (list_loss[2] * dataset_weight).mean().item(),
         }
 
-        # Add codebook metrics
         if hasattr(self.model, "get_codebook_stats"):
             stats = self.model.get_codebook_stats()
             if stats:
@@ -161,7 +166,6 @@ class WhisperVQModule(pl.LightningModule):
                     }
                 )
 
-        # Log all metrics at once
         self.log_dict(
             metrics,
             sync_dist=True,
@@ -169,31 +173,36 @@ class WhisperVQModule(pl.LightningModule):
             on_step=True,
             on_epoch=True,
         )
-        return loss
+        return weighted_loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """
         Perform a validation step.
 
         Args:
-            batch: Tuple of (samples, mask, input_toks, output_toks)
+            batch: Tuple of (samples, mask, input_toks, output_toks) or ((samples, mask, input_toks, output_toks), weight)
             batch_idx: Index of current batch
             dataloader_idx: Index of dataloader when using multiple validation sets
         """
-        samples, mask, input_toks, output_toks = batch
+        if isinstance(batch, (tuple, list)) and len(batch) == 2:
+            (samples, mask, input_toks, output_toks), dataset_weight = batch
+        else:
+            samples, mask, input_toks, output_toks = batch
+            dataset_weight = 1.0
+
         _, logits, loss = self.model(samples, mask, input_toks, output_toks)
 
-        # Base metrics for all validation dataloaders
+        weighted_loss = loss * dataset_weight
+
         metrics = {
-            f"val/loss_{dataloader_idx}": loss.item(),
+            f"val/loss_{dataloader_idx}": weighted_loss.mean().item(),
             f"val/entropy_{dataloader_idx}": self._calculate_entropy(logits),
         }
 
-        # Additional metrics for primary validation set
         if dataloader_idx == 0:
             metrics.update(
                 {
-                    "val/loss": loss.item(),  # Main validation loss
+                    "val/loss": weighted_loss.item(),
                     "val/entropy": self._calculate_entropy(logits),
                 }
             )
@@ -214,7 +223,7 @@ class WhisperVQModule(pl.LightningModule):
             metrics,
             sync_dist=True,
             prog_bar=True,
-            on_step=False,  # Validation metrics typically logged per epoch
+            on_step=False,
             on_epoch=True,
         )
 

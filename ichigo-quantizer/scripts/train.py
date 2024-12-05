@@ -10,7 +10,7 @@ from config.trainer_config import TrainerConfig
 from config.vq_config import VQConfig
 from models.factory import make_vq_model
 from trainer.trainer import WhisperVQTrainer
-from data.dataset import load_whisper_dataset
+from data.dataset import load_multiple_datasets
 
 
 def parse_args():
@@ -53,31 +53,67 @@ def load_state_dict_flexible(model, state_dict):
             print(
                 f"Reshaping key {key}: {state_dict[key].shape} -> {model_state[key].shape}"
             )
+            # STABLE: Kaiming
+            # if "codebook" in key:
+            #     # Handle codebook resizing
+            #     old_size = state_dict[key].shape[1]  # 512
+            #     new_size = model_state[key].shape[1]  # 1024
+            #     if new_size > old_size:
+            #         # Create new empty tensor with target shape (1024)
+            #         new_tensor = torch.empty_like(model_state[key])
+            #         # Copy existing codebook entries (0-511)
+            #         new_tensor[:, :old_size, ...] = state_dict[key]
+
+            #         # For remaining entries (512-1023) #FIXME: AVG
+            #         # mean = state_dict[key].mean(dim=1, keepdim=True)
+            #         # std = state_dict[key].std(dim=1, keepdim=True)
+            #         # # Generate random values around the mean with small variance
+            #         # noise = torch.randn_like(new_tensor[:, old_size:, ...]) * std * 0.1
+            #         # new_tensor[:, old_size:, ...] = mean + noise
+            #         # state_dict[key] = new_tensor
+
+            #         # Kaiming initialization
+            #         fan_in = new_tensor.size(-1)
+            #         bound = torch.sqrt(torch.tensor(2.0 / fan_in))
+            #         new_tensor[:, old_size:, ...].normal_(0, bound.item())
+            #         state_dict[key] = new_tensor
+            #     else:
+            #         # Truncate
+            #         state_dict[key] = state_dict[key][:, :new_size, ...]
+
+            # TEST: Duplicate w/ noise
             if "codebook" in key:
                 # Handle codebook resizing
                 old_size = state_dict[key].shape[1]  # 512
                 new_size = model_state[key].shape[1]  # 1024
                 if new_size > old_size:
-                    # Create new empty tensor with target shape (1024)
+                    # Create new empty tensor with target shape
                     new_tensor = torch.empty_like(model_state[key])
-                    # Copy existing codebook entries (0-511)
-                    new_tensor[:, :old_size, ...] = state_dict[key]
 
-                    # For remaining entries (512-1023)
-                    # mean = state_dict[key].mean(dim=1, keepdim=True)
-                    # std = state_dict[key].std(dim=1, keepdim=True)
-                    # # Generate random values around the mean with small variance
-                    # noise = torch.randn_like(new_tensor[:, old_size:, ...]) * std * 0.1
-                    # new_tensor[:, old_size:, ...] = mean + noise
-                    # state_dict[key] = new_tensor
+                    # Calculate how many times to repeat the old codebook
+                    num_repeats = (
+                        new_size + old_size - 1
+                    ) // old_size  # ceiling division
 
-                    # Kaiming initialization
-                    fan_in = new_tensor.size(-1)
-                    bound = torch.sqrt(torch.tensor(2.0 / fan_in))
-                    new_tensor[:, old_size:, ...].normal_(0, bound.item())
+                    # Repeat the old codebook entries with noise
+                    for i in range(num_repeats):
+                        start_idx = i * old_size
+                        end_idx = min((i + 1) * old_size, new_size)
+                        new_tensor[:, start_idx:end_idx, ...] = state_dict[key][
+                            :, : end_idx - start_idx, ...
+                        ]
+
+                        # Add small noise for better learning
+                        if i > 0:  # Don't add noise to the first copy
+                            noise = (
+                                torch.randn_like(new_tensor[:, start_idx:end_idx, ...])
+                                * 0.01
+                            )
+                            new_tensor[:, start_idx:end_idx, ...] += noise
+
                     state_dict[key] = new_tensor
                 else:
-                    # Truncate
+                    # Truncate if new size is smaller
                     state_dict[key] = state_dict[key][:, :new_size, ...]
             else:
                 # For non-codebook tensors, use model's initialization
@@ -124,19 +160,24 @@ def main():
         load_state_dict_flexible(model, checkpoint["state_dict"])
         model.train()
 
-    # Create datasets
-    train_dataset = load_whisper_dataset(
-        dataset_dir="linhtran92/viet_bud500",
-        language="vi",
-        model="medium",
-    )
+    dataset_configs = [
+        {
+            "dataset_dir": "linhtran92/viet_bud500",
+            "language": "vi",
+            "model": "medium",
+            "weight": 0.7,  # 70% Vietnamese
+        },
+        {
+            "dataset_dir": "parler-tts/libritts_r_filtered",
+            "language": "en",
+            "model": "medium",
+            "weight": 0.3,  # 30% English
+        },
+    ]
 
-    val_dataset = load_whisper_dataset(
-        dataset_dir="linhtran92/viet_bud500",
-        language="vi",
-        validation=True,
-        model="medium",
-    )
+    # Create weighted datasets
+    train_dataset = load_multiple_datasets(dataset_configs, validation=False)
+    val_dataset = load_multiple_datasets(dataset_configs, validation=True)
 
     # Create and run trainer
     trainer = WhisperVQTrainer(trainer_config)

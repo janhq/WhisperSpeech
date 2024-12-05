@@ -1,10 +1,24 @@
-from typing import Tuple, Optional
-from torch.utils.data import Dataset
+from typing import Tuple, Optional, List
+from torch.utils.data import Dataset, ConcatDataset
 from datasets import load_dataset
 import torch
 import torch.nn.functional as F
 import torchaudio
 import whisper
+
+
+class WeightedDataset(Dataset):
+    """Wrapper for dataset with weight"""
+
+    def __init__(self, dataset: Dataset, weight: float = 1.0):
+        self.dataset = dataset
+        self.weight = weight
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        return self.dataset[idx], self.weight
 
 
 class WhisperDataset(Dataset):
@@ -18,8 +32,23 @@ class WhisperDataset(Dataset):
         num_samples: Optional[int] = None,
         task: str = "train",
     ):
-        """Initialize dataset with same parameters as before"""
-        self.dataset = load_dataset(dataset_dir, split=split)
+        if "libritts_r_filtered" in dataset_dir:
+            if split == "validation":
+                self.dataset = load_dataset(dataset_dir, "clean", split="dev.clean")
+            else:
+                self.dataset = load_dataset(
+                    dataset_dir, "clean", split="train.clean.360"
+                )
+
+            self.dataset = self.dataset.select_columns(["audio", "text_normalized"])
+            self.dataset = self.dataset.rename_column(
+                "text_normalized", "transcription"
+            )
+            print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
+        else:
+            self.dataset = load_dataset(dataset_dir, split=split)
+            print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
+
         if num_samples:
             self.dataset = self.dataset.select(
                 range(min(num_samples, len(self.dataset)))
@@ -114,9 +143,11 @@ def load_whisper_dataset(
     language: str = "vi",
     validation: bool = False,
     num_samples: Optional[int] = None,
-) -> WhisperDataset:
+    weight: float = 1.0,
+) -> WeightedDataset:
+    """Load dataset with weight"""
     split = "validation" if validation else "train"
-    return WhisperDataset(
+    dataset = WhisperDataset(
         dataset_dir=dataset_dir,
         split=split,
         txt_label=txt_label,
@@ -124,6 +155,19 @@ def load_whisper_dataset(
         language=language,
         num_samples=num_samples,
     )
+    return WeightedDataset(dataset, weight)
+
+
+def load_multiple_datasets(
+    dataset_configs: List[dict],
+    validation: bool = False,
+) -> ConcatDataset:
+    """Load multiple datasets with their weights"""
+    datasets = []
+    for config in dataset_configs:
+        dataset = load_whisper_dataset(validation=validation, **config)
+        datasets.append(dataset)
+    return ConcatDataset(datasets)
 
 
 def load_test_dataset(
