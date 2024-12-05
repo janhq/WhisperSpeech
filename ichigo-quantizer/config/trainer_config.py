@@ -48,6 +48,7 @@ class TrainerConfig:
 
     # Task identifier
     task: str
+    run_name: Optional[str] = None
 
     # Training loop parameters
     iterations: int = 8000

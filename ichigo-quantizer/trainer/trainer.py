@@ -70,7 +70,7 @@ class WhisperVQTrainer:
         if self.config.wandb_suffix:
             project += f"-{self.config.wandb_suffix}"
 
-        self.run_name = generate_run_name()
+        self.run_name = self.config.run_name
         self.wandb_logger = WandbLogger(project=project, name=self.run_name)
 
         # Log configuration parameters

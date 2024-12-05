@@ -18,8 +18,6 @@ def parse_args():
     parser.add_argument("--task", type=str, required=True)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--iterations", type=int, default=8000)
-    parser.add_argument("--training-data", type=str, required=True)
-    parser.add_argument("--validation-data", type=str, required=True)
     parser.add_argument("--tunables", type=str, default="")
     parser.add_argument("--num-gpus", type=int, default=1)
     parser.add_argument(
@@ -31,7 +29,8 @@ def parse_args():
     parser.add_argument(
         "--load-checkpoint", type=str, help="Path to checkpoint to load"
     )
-    parser.add_argument("--wandb-task-name", type=str, default=None)
+    parser.add_argument("--wandb-task-name", type=str, required=True)
+    parser.add_argument("--run-name", type=str, required=True)
     return parser.parse_args()
 
 
@@ -106,10 +105,9 @@ def main():
         task=task_name,
         batch_size=args.batch_size,
         iterations=args.iterations,
-        training_data=[args.training_data],
-        validation_data=[args.validation_data],
         vq_config=vq_config,
         wandb_task_name=args.wandb_task_name,
+        run_name=args.run_name,
         validate_every_n_steps=args.validate_every_n_steps,
         num_gpus=args.num_gpus,
         resume_from=args.resume_from,
