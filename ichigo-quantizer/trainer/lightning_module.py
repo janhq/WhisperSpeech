@@ -140,20 +140,17 @@ class WhisperVQModule(pl.LightningModule):
             loss: Total loss value for optimization
         """
         if isinstance(batch, (tuple, list)) and len(batch) == 2:
-            (samples, mask, input_toks, output_toks), dataset_weight = batch
+            (samples, mask, input_toks, output_toks), _ = batch
         else:
             samples, mask, input_toks, output_toks = batch
-            dataset_weight = 1.0
 
         list_loss, logits, loss = self.model(samples, mask, input_toks, output_toks)
 
-        weighted_loss = loss * dataset_weight
-
         metrics = {
-            "loss/total_train": weighted_loss.item(),
-            "loss/ce_loss": (list_loss[0] * dataset_weight).mean().item(),
-            "loss/kl_loss": (list_loss[1] * dataset_weight).mean().item(),
-            "loss/commit_loss": (list_loss[2] * dataset_weight).mean().item(),
+            "loss/total_train": loss.item(),
+            "loss/ce_loss": list_loss[0],
+            "loss/kl_loss": list_loss[1],
+            "loss/commit_loss": list_loss[2],
         }
 
         if hasattr(self.model, "get_codebook_stats"):
@@ -173,7 +170,7 @@ class WhisperVQModule(pl.LightningModule):
             on_step=True,
             on_epoch=True,
         )
-        return weighted_loss
+        return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """
@@ -185,24 +182,21 @@ class WhisperVQModule(pl.LightningModule):
             dataloader_idx: Index of dataloader when using multiple validation sets
         """
         if isinstance(batch, (tuple, list)) and len(batch) == 2:
-            (samples, mask, input_toks, output_toks), dataset_weight = batch
+            (samples, mask, input_toks, output_toks), _ = batch
         else:
             samples, mask, input_toks, output_toks = batch
-            dataset_weight = 1.0
 
         _, logits, loss = self.model(samples, mask, input_toks, output_toks)
 
-        weighted_loss = loss * dataset_weight
-
         metrics = {
-            f"val/loss_{dataloader_idx}": weighted_loss.mean().item(),
+            f"val/loss_{dataloader_idx}": loss.item(),
             f"val/entropy_{dataloader_idx}": self._calculate_entropy(logits),
         }
 
         if dataloader_idx == 0:
             metrics.update(
                 {
-                    "val/loss": weighted_loss.item(),
+                    "val/loss": loss.item(),
                     "val/entropy": self._calculate_entropy(logits),
                 }
             )

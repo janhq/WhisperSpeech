@@ -104,7 +104,7 @@ def load_state_dict_flexible(model, state_dict):
                         ]
 
                         # Add small noise for better learning
-                        if i > 0:  # Don't add noise to the first copy
+                        if i > 0:
                             noise = (
                                 torch.randn_like(new_tensor[:, start_idx:end_idx, ...])
                                 * 0.01
