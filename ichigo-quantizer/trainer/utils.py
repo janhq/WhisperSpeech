@@ -1,11 +1,4 @@
-from faker import Faker
 from torch.utils.data import DataLoader
-
-
-def generate_run_name() -> str:
-    """Generate a unique run name"""
-    fake = Faker()
-    return f"{fake.name().split()[0]}_{fake.color_name()}".lower()
 
 
 def setup_dataloaders(train_dataset, val_dataset, config):
@@ -39,6 +32,7 @@ def clean_whisper_text(text: str) -> str:
         "<|notimestamps|>",
         "<|nospeech|>",
         "<|endoftext|>",
+        "<|pl|>",
     ]
     for token in special_tokens:
         text = text.replace(token, "")

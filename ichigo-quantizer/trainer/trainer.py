@@ -7,11 +7,10 @@ import lightning.pytorch as pl
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from lightning.fabric.utilities.rank_zero import rank_zero_only
-import webdataset as wds
 from config.trainer_config import TrainerConfig
 from trainer.lightning_module import WhisperVQModule
-from trainer.utils import generate_run_name, setup_dataloaders, clean_whisper_text
-from torch.utils.data import DataLoader
+from trainer.utils import clean_whisper_text
+from torch.utils.data import DataLoader, WeightedRandomSampler, ConcatDataset
 import whisper
 
 
@@ -70,7 +69,7 @@ class WhisperVQTrainer:
         if self.config.wandb_suffix:
             project += f"-{self.config.wandb_suffix}"
 
-        self.run_name = generate_run_name()
+        self.run_name = self.config.run_name
         self.wandb_logger = WandbLogger(project=project, name=self.run_name)
 
         # Log configuration parameters
@@ -170,9 +169,57 @@ class WhisperVQTrainer:
         3. Executes the training
         4. Saves the final model (on rank 0 only)
         """
-        train_loader, val_loaders = setup_dataloaders(
-            train_dataset, val_datasets, self.config
-        )
+        # Train DataLoader
+        if isinstance(train_dataset, ConcatDataset):
+            weights = []
+            dataset_sizes = []
+            for dataset in train_dataset.datasets:
+                weight = getattr(dataset, "weight", 1.0)
+                size = len(dataset)
+                weights.extend([weight] * size)
+                dataset_sizes.append(size)
+
+            weights = torch.DoubleTensor(weights)
+            sampler = WeightedRandomSampler(
+                weights=weights, num_samples=len(weights), replacement=True
+            )
+
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=self.config.batch_size,
+                sampler=sampler,
+                num_workers=self.config.num_workers,
+                pin_memory=True,
+            )
+        else:
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=self.config.batch_size,
+                shuffle=True,
+                num_workers=self.config.num_workers,
+                pin_memory=True,
+            )
+
+        # Test DataLoader
+        if isinstance(val_datasets, (list, tuple)):
+            val_loaders = [
+                DataLoader(
+                    val_dataset,
+                    batch_size=self.config.batch_size,
+                    shuffle=False,
+                    num_workers=self.config.num_workers,
+                    pin_memory=True,
+                )
+                for val_dataset in val_datasets
+            ]
+        else:
+            val_loaders = DataLoader(
+                val_datasets,
+                batch_size=self.config.batch_size,
+                shuffle=False,
+                num_workers=self.config.num_workers,
+                pin_memory=True,
+            )
 
         lightning_module = WhisperVQModule(model, self.config)
 
