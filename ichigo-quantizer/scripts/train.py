@@ -165,13 +165,15 @@ def main():
             "dataset_dir": "linhtran92/viet_bud500",
             "language": "vi",
             "model": "medium",
-            "weight": 0.7,  # 70% Vietnamese
+            "weight": 0.7,
+            "concat_samples": True,
         },
         {
             "dataset_dir": "parler-tts/libritts_r_filtered",
             "language": "en",
             "model": "medium",
-            "weight": 0.3,  # 30% English
+            "weight": 0.3,
+            "concat_samples": True,
         },
     ]
 

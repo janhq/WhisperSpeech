@@ -151,3 +151,4 @@ wandb/
 **/outputs
 __pycache__/
 checkpoints/
+vq_stoks/
