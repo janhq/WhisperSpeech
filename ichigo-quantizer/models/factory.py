@@ -55,6 +55,14 @@ def make_vq_model(
             downsample=2,
             whisper_model_name="large-v3",
         ),
+        "large-v3-vi-2d-2048c-dim64": dict(
+            codebook_dim=64,
+            vq_codes=2048,
+            n_head=20,
+            head_width=64,
+            downsample=2,
+            whisper_model_name="large-v3",
+        ),
     }
 
     if size in model_configs:

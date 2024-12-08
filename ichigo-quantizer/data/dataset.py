@@ -153,7 +153,7 @@ class WhisperDataset(Dataset):
             ) + self.tokenizer.encode(example[self.txt_label])
 
             # Pad tokens
-            max_tokens = 200 if self.task == "inference" else 20
+            max_tokens = 200
             rpad = max_tokens - len(tokens)
 
             in_ttoks = F.pad(
@@ -217,7 +217,7 @@ class WhisperDataset(Dataset):
         ) + self.tokenizer.encode(concatenated_text)
 
         # Pad tokens
-        max_tokens = 200  # if self.task == "inference" else 20
+        max_tokens = 200
         rpad = max_tokens - len(tokens)
 
         in_ttoks = F.pad(
@@ -314,5 +314,5 @@ def load_test_dataset(
         model=model,
         language=language,
         num_samples=num_samples,
-        task="inference",
+        concat_samples=False,
     )
