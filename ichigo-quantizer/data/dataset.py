@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 import torchaudio
 import whisper
+from lightning.fabric.utilities.rank_zero import rank_zero_only
 
 
 class WeightedDataset(Dataset):
@@ -27,11 +28,11 @@ class WhisperDataset(Dataset):
         dataset_dir: str,
         split: str = "train",
         txt_label: str = "transcription",
-        model: str = "medium",
         language: str = "vi",
         num_samples: Optional[int] = None,
         task: str = "train",
         concat_samples: bool = True,
+        max_tokens: int = 200,
     ):
         if "libritts_r_filtered" in dataset_dir:
             if split == "validation":
@@ -45,10 +46,12 @@ class WhisperDataset(Dataset):
             self.dataset = self.dataset.rename_column(
                 "text_normalized", "transcription"
             )
-            print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
+            if rank_zero_only.rank == 0:
+                print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
         else:
             self.dataset = load_dataset(dataset_dir, split=split)
-            print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
+            if rank_zero_only.rank == 0:
+                print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
 
         if num_samples:
             self.dataset = self.dataset.select(
@@ -57,17 +60,19 @@ class WhisperDataset(Dataset):
 
         self.txt_label = txt_label
         self.language = language
-        self.model = model
         self.task = task
         self.max_audio_length = 30 * 16000  # 30 seconds at 16kHz
         self.tokenizer = whisper.tokenizer.get_tokenizer(
             True, language=language, task="transcribe"
         )
 
+        self.max_tokens = max_tokens
+
         # Concatenate samples
         self.concat_samples = concat_samples
 
         if self.concat_samples:
+            print("🔗 Concatenating samples to maximize usage of 30-second window")
             self.grouped_indices = self._group_samples()
 
             # # Process all samples once to gather statistics
@@ -153,8 +158,7 @@ class WhisperDataset(Dataset):
             ) + self.tokenizer.encode(example[self.txt_label])
 
             # Pad tokens
-            max_tokens = 200 if self.task == "inference" else 20
-            rpad = max_tokens - len(tokens)
+            rpad = self.max_tokens - len(tokens)
 
             in_ttoks = F.pad(
                 torch.tensor(tokens, dtype=torch.long),
@@ -217,8 +221,7 @@ class WhisperDataset(Dataset):
         ) + self.tokenizer.encode(concatenated_text)
 
         # Pad tokens
-        max_tokens = 200  # if self.task == "inference" else 20
-        rpad = max_tokens - len(tokens)
+        rpad = self.max_tokens - len(tokens)
 
         in_ttoks = F.pad(
             torch.tensor(tokens, dtype=torch.long),
@@ -265,12 +268,12 @@ class WhisperDataset(Dataset):
 def load_whisper_dataset(
     dataset_dir: str,
     txt_label: str = "transcription",
-    model: str = "medium",
     language: str = "vi",
     validation: bool = False,
     num_samples: Optional[int] = None,
     weight: float = 1.0,
     concat_samples: bool = True,
+    max_tokens: int = 200,
 ) -> WeightedDataset:
     """Load dataset with weight"""
     split = "validation" if validation else "train"
@@ -280,10 +283,10 @@ def load_whisper_dataset(
         dataset_dir=dataset_dir,
         split=split,
         txt_label=txt_label,
-        model=model,
         language=language,
         num_samples=num_samples,
         concat_samples=concat_mode,
+        max_tokens=max_tokens,
     )
     return WeightedDataset(dataset, weight)
 
@@ -303,7 +306,6 @@ def load_multiple_datasets(
 def load_test_dataset(
     dataset_dir: str,
     txt_label: str = "transcription",
-    model: str = "medium",
     language: str = "vi",
     num_samples: Optional[int] = None,
 ) -> WhisperDataset:
@@ -311,8 +313,7 @@ def load_test_dataset(
         dataset_dir=dataset_dir,
         split="test",
         txt_label=txt_label,
-        model=model,
         language=language,
         num_samples=num_samples,
-        task="inference",
+        concat_samples=False,
     )

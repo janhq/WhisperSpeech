@@ -1,5 +1,8 @@
 import sys
+import warnings
 from pathlib import Path
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
@@ -17,7 +20,15 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, required=True)
     parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--iterations", type=int, default=8000)
+    parser.add_argument(
+        "--epochs", type=int, default=100, help="Number of training epochs"
+    )
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=None,
+        help="Optional: Override epochs with fixed iterations",
+    )
     parser.add_argument("--tunables", type=str, default="")
     parser.add_argument("--num-gpus", type=int, default=1)
     parser.add_argument(
@@ -31,6 +42,12 @@ def parse_args():
     )
     parser.add_argument("--wandb-task-name", type=str, required=True)
     parser.add_argument("--run-name", type=str, required=True)
+    parser.add_argument(
+        "--concat-samples",
+        action="store_true",
+        help="concatenate samples, default is False",
+    )
+    parser.add_argument("--max-tokens", type=int, default=200)
     return parser.parse_args()
 
 
@@ -140,6 +157,7 @@ def main():
     trainer_config = TrainerConfig(
         task=task_name,
         batch_size=args.batch_size,
+        epochs=args.epochs,
         iterations=args.iterations,
         vq_config=vq_config,
         wandb_task_name=args.wandb_task_name,
@@ -164,16 +182,16 @@ def main():
         {
             "dataset_dir": "linhtran92/viet_bud500",
             "language": "vi",
-            "model": "medium",
             "weight": 0.7,
-            "concat_samples": True,
+            "concat_samples": args.concat_samples,
+            "max_tokens": args.max_tokens,
         },
         {
             "dataset_dir": "parler-tts/libritts_r_filtered",
             "language": "en",
-            "model": "medium",
             "weight": 0.3,
-            "concat_samples": True,
+            "concat_samples": args.concat_samples,
+            "max_tokens": args.max_tokens,
         },
     ]
 

@@ -12,6 +12,8 @@ from trainer.lightning_module import WhisperVQModule
 from trainer.utils import clean_whisper_text
 from torch.utils.data import DataLoader, WeightedRandomSampler, ConcatDataset
 import whisper
+from tqdm import tqdm
+import wandb
 
 
 class WhisperVQTrainer:
@@ -128,31 +130,37 @@ class WhisperVQTrainer:
         ]
 
     def _setup_trainer(self):
-        """
-        Initialize PyTorch Lightning trainer.
+        """Initialize PyTorch Lightning trainer."""
+        trainer_kwargs = {
+            "strategy": self.config.strategy,
+            "accelerator": "gpu",
+            "precision": self.config.precision,
+            "gradient_clip_val": self.config.vq_config.clip_gradient_norm,
+            "accumulate_grad_batches": self.config.accumulate_grad_batches,
+            "logger": self.wandb_logger,
+            "callbacks": self.callbacks,
+            "num_nodes": int(os.environ.get("SLURM_NNODES", 1)),
+            "devices": int(self.config.num_gpus),
+            "log_every_n_steps": 1,
+        }
 
-        Configures training parameters including:
-        - Distributed training strategy
-        - Hardware acceleration
-        - Precision settings
-        - Gradient clipping
-        - Validation frequency
-        - Multi-node training support
-        """
-        self.trainer = pl.Trainer(
-            strategy=self.config.strategy,
-            max_steps=self.config.iterations,
-            accelerator="gpu",
-            precision=self.config.precision,
-            gradient_clip_val=self.config.vq_config.clip_gradient_norm,
-            accumulate_grad_batches=self.config.accumulate_grad_batches,
-            val_check_interval=self.config.validate_every_n_steps,
-            logger=self.wandb_logger,
-            callbacks=self.callbacks,
-            num_nodes=int(os.environ.get("SLURM_NNODES", 1)),
-            devices=int(self.config.num_gpus),
-            log_every_n_steps=1,
-        )
+        # Configure validation frequency based on training mode
+        if self.config.iterations:
+            # Iteration-based training
+            trainer_kwargs["max_steps"] = self.config.iterations
+            if self.config.validate_every_n_steps:
+                # Use check_val_every_n_epoch=None to enable step-based validation
+                trainer_kwargs["check_val_every_n_epoch"] = None
+                trainer_kwargs["val_check_interval"] = (
+                    self.config.validate_every_n_steps
+                )
+        else:
+            # Epoch-based training
+            trainer_kwargs["max_epochs"] = self.config.epochs
+            # Validate once per epoch (default behavior)
+            trainer_kwargs["check_val_every_n_epoch"] = 1
+
+        self.trainer = pl.Trainer(**trainer_kwargs)
 
     def train(self, model, train_dataset, val_datasets):
         """
@@ -221,7 +229,14 @@ class WhisperVQTrainer:
                 pin_memory=True,
             )
 
-        lightning_module = WhisperVQModule(model, self.config)
+        train_dataset_size = len(train_dataset)
+
+        if rank_zero_only.rank == 0:
+            print(f"🥹 Training dataset size: {train_dataset_size}")
+
+        lightning_module = WhisperVQModule(
+            model, self.config, train_dataset_size=train_dataset_size
+        )
 
         self.trainer.fit(
             model=lightning_module,
@@ -233,9 +248,13 @@ class WhisperVQTrainer:
         if rank_zero_only.rank == 0:
             self._save_model(model)
 
-    def get_predictions(self, model, test_dataset):
-        whisper_model = whisper.load_model("medium")
+    def get_predictions(self, model, test_dataset, whisper_name, language):
+        whisper_model = whisper.load_model(whisper_name)
         whisper_model.to("cuda")
+
+        # W&B Table to store the results
+        columns = ["audio_id", "ground_truth", "predicted_output", "whisper_output"]
+        predictions_table = wandb.Table(columns=columns)
 
         test_loader = DataLoader(
             test_dataset,
@@ -247,6 +266,14 @@ class WhisperVQTrainer:
         results = []
         model.eval()
         model = model.cuda()
+
+        audio_id_counter = 0
+
+        total_samples = len(test_dataset)
+
+        progress_bar = tqdm(
+            total=total_samples, desc="Generating predictions", unit="samples"
+        )
 
         with torch.no_grad():
             for batch_idx, (samples, mask, input_toks, output_toks) in enumerate(
@@ -277,21 +304,33 @@ class WhisperVQTrainer:
                     audio_sample = samples[i].cpu().numpy()
                     whisper_result = whisper_model.transcribe(
                         audio_sample,
-                        language="vi",
+                        language=language,
                         task="transcribe",
                         fp16=False,
                     )
                     whisper_text = clean_whisper_text(whisper_result["text"])
 
                     result_dict = {
-                        "audio_id": f"audio_{batch_idx}_{i}",
+                        "audio_id": f"audio_{audio_id_counter}",
                         "ground_truth": ground_truth,
                         "predicted_output": pred_text,
                         "whisper_output": whisper_text,
                     }
 
-                    print(result_dict)
+                    predictions_table.add_data(
+                        result_dict["audio_id"],
+                        result_dict["ground_truth"],
+                        result_dict["predicted_output"],
+                        result_dict["whisper_output"],
+                    )
+
+                    # print(result_dict)
                     results.append(result_dict)
+                    audio_id_counter += 1
+                    progress_bar.update(1)
+        progress_bar.close()
+
+        self.wandb_logger.experiment.log({"predictions": predictions_table})
 
         return pd.DataFrame(results)
 

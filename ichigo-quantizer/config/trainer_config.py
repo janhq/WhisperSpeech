@@ -51,7 +51,8 @@ class TrainerConfig:
     run_name: Optional[str] = None
 
     # Training loop parameters
-    iterations: int = 8000
+    epochs: int = 100
+    iterations: Optional[int] = None
     batch_size: int = 16
     accumulate_grad_batches: int = 1
     validate_every_n_steps: int = 500
