@@ -121,10 +121,11 @@ class WhisperVQTrainer:
         self.callbacks = [
             ModelCheckpoint(
                 dirpath=self.config.checkpoint_dir,
-                filename=f"{self.config.task}-{self.run_name}-{{step}}-{{val/loss:.2f}}",
+                filename=f"{self.config.task}/{self.run_name}/{{epoch}}-{{step}}-{{val/loss:.2f}}",
                 monitor=self.config.monitored_metric,
-                save_top_k=3,
-                train_time_interval=datetime.timedelta(minutes=14),
+                save_top_k=1,
+                mode="min",
+                save_on_train_epoch_end=False,
             ),
             LearningRateMonitor(logging_interval="step"),
         ]
