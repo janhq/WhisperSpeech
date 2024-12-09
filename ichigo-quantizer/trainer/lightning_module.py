@@ -4,13 +4,15 @@ import lightning.pytorch as pl
 import pandas as pd
 from models.vq_transformer import RQBottleneckTransformer
 from trainer.wer_metrics import compute_wer_cer
+from lightning.fabric.utilities.rank_zero import rank_zero_only
 
 
 class WhisperVQModule(pl.LightningModule):
-    def __init__(self, model: RQBottleneckTransformer, config):
+    def __init__(self, model: RQBottleneckTransformer, config, train_dataset_size=None):
         super().__init__()
         self.model = model
         self.config = config
+        self.train_dataset_size = train_dataset_size
         self.save_hyperparameters(config.to_hparams())
 
     def on_fit_start(self):
@@ -31,6 +33,20 @@ class WhisperVQModule(pl.LightningModule):
             torch._dynamo.config.optimize_ddp = False
             if hasattr(self.model, "optimize_training"):
                 self.model.optimize_training()
+
+    @rank_zero_only
+    def _log_training_setup(self, total_steps, warmup_steps, steps_per_epoch=None):
+        """Log training setup information (only on master process)"""
+        if self.config.iterations:
+            print(f"Training with fixed iterations: {total_steps}")
+        else:
+            print(f"Dataset size: {self.train_dataset_size}")
+            print(f"Steps per epoch: {steps_per_epoch}")
+            print(f"Total epochs: {self.config.epochs}")
+
+        print(
+            f"Training schedule: {total_steps} total steps with {warmup_steps} warmup steps"
+        )
 
     def configure_optimizers(self):
         """
@@ -97,9 +113,30 @@ class WhisperVQModule(pl.LightningModule):
         # Initialize optimizer
         optimizer = torch.optim.AdamW(params=param_groups, lr=lr, betas=(0.9, 0.95))
 
-        # Configure scheduler
-        warmup_steps = self.config.vq_config.warmup_steps
-        total_steps = self.config.iterations
+        # Calculate total steps based on either iterations or epochs
+        if self.config.iterations:
+            total_steps = self.config.iterations
+            steps_per_epoch = None
+        else:
+            if self.train_dataset_size is None:
+                raise ValueError(
+                    "train_dataset_size must be provided for epoch-based training"
+                )
+
+            # Calculate steps for epoch-based training
+            num_devices = self.trainer.num_devices if self.trainer else 1
+            steps_per_epoch = self.train_dataset_size // (
+                self.config.batch_size * num_devices
+            )
+            total_steps = steps_per_epoch * self.config.epochs
+
+        # Calculate warmup steps
+        warmup_steps = getattr(
+            self.config.vq_config, "warmup_steps", max(1, int(0.05 * total_steps))
+        )
+
+        # Log training setup (only on master process)
+        self._log_training_setup(total_steps, warmup_steps, steps_per_epoch)
 
         # Create warmup scheduler
         warmup_scheduler = torch.optim.lr_scheduler.LinearLR(

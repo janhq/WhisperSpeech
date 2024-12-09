@@ -1,8 +1,7 @@
 WANDB_ENTITY="janai" python -m scripts.train \
     --task "vq_stoks medium-vi-2d-2048c-dim64" \
     --batch-size 42 \
-    --iterations 24900 \
-    --validate-every-n-steps 249 \
+    --epochs 100 \
     --tunables "--rope --mask_embs --downsample_mean" \
     --wandb-task-name "ichigo-quantizer" \
     --max-tokens 200 \

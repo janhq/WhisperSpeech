@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 import torchaudio
 import whisper
+from lightning.fabric.utilities.rank_zero import rank_zero_only
 
 
 class WeightedDataset(Dataset):
@@ -45,10 +46,12 @@ class WhisperDataset(Dataset):
             self.dataset = self.dataset.rename_column(
                 "text_normalized", "transcription"
             )
-            print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
+            if rank_zero_only.rank == 0:
+                print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
         else:
             self.dataset = load_dataset(dataset_dir, split=split)
-            print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
+            if rank_zero_only.rank == 0:
+                print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
 
         if num_samples:
             self.dataset = self.dataset.select(

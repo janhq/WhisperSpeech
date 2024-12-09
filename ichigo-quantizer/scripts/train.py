@@ -1,5 +1,8 @@
 import sys
+import warnings
 from pathlib import Path
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
@@ -17,7 +20,15 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, required=True)
     parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--iterations", type=int, default=8000)
+    parser.add_argument(
+        "--epochs", type=int, default=100, help="Number of training epochs"
+    )
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=None,
+        help="Optional: Override epochs with fixed iterations",
+    )
     parser.add_argument("--tunables", type=str, default="")
     parser.add_argument("--num-gpus", type=int, default=1)
     parser.add_argument(
@@ -146,6 +157,7 @@ def main():
     trainer_config = TrainerConfig(
         task=task_name,
         batch_size=args.batch_size,
+        epochs=args.epochs,
         iterations=args.iterations,
         vq_config=vq_config,
         wandb_task_name=args.wandb_task_name,

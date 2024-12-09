@@ -129,31 +129,37 @@ class WhisperVQTrainer:
         ]
 
     def _setup_trainer(self):
-        """
-        Initialize PyTorch Lightning trainer.
+        """Initialize PyTorch Lightning trainer."""
+        trainer_kwargs = {
+            "strategy": self.config.strategy,
+            "accelerator": "gpu",
+            "precision": self.config.precision,
+            "gradient_clip_val": self.config.vq_config.clip_gradient_norm,
+            "accumulate_grad_batches": self.config.accumulate_grad_batches,
+            "logger": self.wandb_logger,
+            "callbacks": self.callbacks,
+            "num_nodes": int(os.environ.get("SLURM_NNODES", 1)),
+            "devices": int(self.config.num_gpus),
+            "log_every_n_steps": 1,
+        }
 
-        Configures training parameters including:
-        - Distributed training strategy
-        - Hardware acceleration
-        - Precision settings
-        - Gradient clipping
-        - Validation frequency
-        - Multi-node training support
-        """
-        self.trainer = pl.Trainer(
-            strategy=self.config.strategy,
-            max_steps=self.config.iterations,
-            accelerator="gpu",
-            precision=self.config.precision,
-            gradient_clip_val=self.config.vq_config.clip_gradient_norm,
-            accumulate_grad_batches=self.config.accumulate_grad_batches,
-            val_check_interval=self.config.validate_every_n_steps,
-            logger=self.wandb_logger,
-            callbacks=self.callbacks,
-            num_nodes=int(os.environ.get("SLURM_NNODES", 1)),
-            devices=int(self.config.num_gpus),
-            log_every_n_steps=1,
-        )
+        # Configure validation frequency based on training mode
+        if self.config.iterations:
+            # Iteration-based training
+            trainer_kwargs["max_steps"] = self.config.iterations
+            if self.config.validate_every_n_steps:
+                # Use check_val_every_n_epoch=None to enable step-based validation
+                trainer_kwargs["check_val_every_n_epoch"] = None
+                trainer_kwargs["val_check_interval"] = (
+                    self.config.validate_every_n_steps
+                )
+        else:
+            # Epoch-based training
+            trainer_kwargs["max_epochs"] = self.config.epochs
+            # Validate once per epoch (default behavior)
+            trainer_kwargs["check_val_every_n_epoch"] = 1
+
+        self.trainer = pl.Trainer(**trainer_kwargs)
 
     def train(self, model, train_dataset, val_datasets):
         """
@@ -222,7 +228,14 @@ class WhisperVQTrainer:
                 pin_memory=True,
             )
 
-        lightning_module = WhisperVQModule(model, self.config)
+        train_dataset_size = len(train_dataset)
+
+        if rank_zero_only.rank == 0:
+            print(f"🥹 Training dataset size: {train_dataset_size}")
+
+        lightning_module = WhisperVQModule(
+            model, self.config, train_dataset_size=train_dataset_size
+        )
 
         self.trainer.fit(
             model=lightning_module,
