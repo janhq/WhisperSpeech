@@ -12,6 +12,7 @@ from trainer.lightning_module import WhisperVQModule
 from trainer.utils import clean_whisper_text
 from torch.utils.data import DataLoader, WeightedRandomSampler, ConcatDataset
 import whisper
+from tqdm import tqdm
 
 
 class WhisperVQTrainer:
@@ -233,8 +234,8 @@ class WhisperVQTrainer:
         if rank_zero_only.rank == 0:
             self._save_model(model)
 
-    def get_predictions(self, model, test_dataset):
-        whisper_model = whisper.load_model("medium")
+    def get_predictions(self, model, test_dataset, whisper_name, language):
+        whisper_model = whisper.load_model(whisper_name)
         whisper_model.to("cuda")
 
         test_loader = DataLoader(
@@ -247,6 +248,14 @@ class WhisperVQTrainer:
         results = []
         model.eval()
         model = model.cuda()
+
+        audio_id_counter = 0
+
+        total_samples = len(test_dataset)
+
+        progress_bar = tqdm(
+            total=total_samples, desc="Generating predictions", unit="samples"
+        )
 
         with torch.no_grad():
             for batch_idx, (samples, mask, input_toks, output_toks) in enumerate(
@@ -277,22 +286,24 @@ class WhisperVQTrainer:
                     audio_sample = samples[i].cpu().numpy()
                     whisper_result = whisper_model.transcribe(
                         audio_sample,
-                        language="vi",
+                        language=language,
                         task="transcribe",
                         fp16=False,
                     )
                     whisper_text = clean_whisper_text(whisper_result["text"])
 
                     result_dict = {
-                        "audio_id": f"audio_{batch_idx}_{i}",
+                        "audio_id": f"audio_{audio_id_counter}",
                         "ground_truth": ground_truth,
                         "predicted_output": pred_text,
                         "whisper_output": whisper_text,
                     }
 
-                    print(result_dict)
+                    # print(result_dict)
                     results.append(result_dict)
-
+                    audio_id_counter += 1
+                    progress_bar.update(1)
+        progress_bar.close()
         return pd.DataFrame(results)
 
     def _save_model(self, model):

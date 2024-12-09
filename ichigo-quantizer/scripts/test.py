@@ -21,12 +21,13 @@ def parse_args():
     parser.add_argument(
         "--test-data", type=str, required=True, help="Path to test dataset"
     )
+    parser.add_argument("--model-size", type=str, required=True, help="VQ Model")
+    parser.add_argument("--whisper-name", type=str, required=True, help="Whisper model")
     parser.add_argument(
-        "--model-size", type=str, default="medium", help="Whisper model size"
+        "--language", type=str, default="vi", help="Language of the data"
     )
-    parser.add_argument("--language", type=str, default="vi", help="Language code")
     parser.add_argument(
-        "--batch-size", type=int, default=48, help="Batch size for evaluation"
+        "--batch-size", type=int, default=100, help="Batch size for evaluation"
     )
     return parser.parse_args()
 
@@ -51,12 +52,13 @@ def main():
     test_dataset = load_test_dataset(
         dataset_dir=args.test_data,
         language=args.language,
-        model=args.model_size,
     )
 
     # Create trainer and get predictions
     trainer = WhisperVQTrainer(trainer_config)
-    predictions_df = trainer.get_predictions(model, test_dataset)
+    predictions_df = trainer.get_predictions(
+        model, test_dataset, args.whisper_name, args.language
+    )
 
     # Save predictions
     output_path = f"predictions_{Path(args.model_path).stem}.csv"

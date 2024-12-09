@@ -27,7 +27,6 @@ class WhisperDataset(Dataset):
         dataset_dir: str,
         split: str = "train",
         txt_label: str = "transcription",
-        model: str = "medium",
         language: str = "vi",
         num_samples: Optional[int] = None,
         task: str = "train",
@@ -57,7 +56,6 @@ class WhisperDataset(Dataset):
 
         self.txt_label = txt_label
         self.language = language
-        self.model = model
         self.task = task
         self.max_audio_length = 30 * 16000  # 30 seconds at 16kHz
         self.tokenizer = whisper.tokenizer.get_tokenizer(
@@ -217,7 +215,7 @@ class WhisperDataset(Dataset):
         ) + self.tokenizer.encode(concatenated_text)
 
         # Pad tokens
-        max_tokens = 200
+        max_tokens = 200  # TODO: don't hardcode this (default 200)
         rpad = max_tokens - len(tokens)
 
         in_ttoks = F.pad(
@@ -265,7 +263,6 @@ class WhisperDataset(Dataset):
 def load_whisper_dataset(
     dataset_dir: str,
     txt_label: str = "transcription",
-    model: str = "medium",
     language: str = "vi",
     validation: bool = False,
     num_samples: Optional[int] = None,
@@ -280,7 +277,6 @@ def load_whisper_dataset(
         dataset_dir=dataset_dir,
         split=split,
         txt_label=txt_label,
-        model=model,
         language=language,
         num_samples=num_samples,
         concat_samples=concat_mode,
@@ -303,7 +299,6 @@ def load_multiple_datasets(
 def load_test_dataset(
     dataset_dir: str,
     txt_label: str = "transcription",
-    model: str = "medium",
     language: str = "vi",
     num_samples: Optional[int] = None,
 ) -> WhisperDataset:
@@ -311,7 +306,6 @@ def load_test_dataset(
         dataset_dir=dataset_dir,
         split="test",
         txt_label=txt_label,
-        model=model,
         language=language,
         num_samples=num_samples,
         concat_samples=False,
