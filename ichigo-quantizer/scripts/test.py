@@ -60,11 +60,6 @@ def main():
         model, test_dataset, args.whisper_name, args.language
     )
 
-    # Save predictions
-    output_path = f"predictions_{Path(args.model_path).stem}.csv"
-    predictions_df.to_csv(output_path, index=False)
-    print(f"\nPredictions saved to: {output_path}")
-
 
 if __name__ == "__main__":
     main()

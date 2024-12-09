@@ -13,6 +13,7 @@ from trainer.utils import clean_whisper_text
 from torch.utils.data import DataLoader, WeightedRandomSampler, ConcatDataset
 import whisper
 from tqdm import tqdm
+import wandb
 
 
 class WhisperVQTrainer:
@@ -251,6 +252,10 @@ class WhisperVQTrainer:
         whisper_model = whisper.load_model(whisper_name)
         whisper_model.to("cuda")
 
+        # W&B Table to store the results
+        columns = ["audio_id", "ground_truth", "predicted_output", "whisper_output"]
+        predictions_table = wandb.Table(columns=columns)
+
         test_loader = DataLoader(
             test_dataset,
             batch_size=self.config.batch_size,
@@ -312,11 +317,21 @@ class WhisperVQTrainer:
                         "whisper_output": whisper_text,
                     }
 
+                    predictions_table.add_data(
+                        result_dict["audio_id"],
+                        result_dict["ground_truth"],
+                        result_dict["predicted_output"],
+                        result_dict["whisper_output"],
+                    )
+
                     # print(result_dict)
                     results.append(result_dict)
                     audio_id_counter += 1
                     progress_bar.update(1)
         progress_bar.close()
+
+        self.wandb_logger.experiment.log({"predictions": predictions_table})
+
         return pd.DataFrame(results)
 
     def _save_model(self, model):
