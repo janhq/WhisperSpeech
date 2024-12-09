@@ -31,6 +31,7 @@ class WhisperDataset(Dataset):
         num_samples: Optional[int] = None,
         task: str = "train",
         concat_samples: bool = True,
+        max_tokens: int = 200,
     ):
         if "libritts_r_filtered" in dataset_dir:
             if split == "validation":
@@ -62,10 +63,13 @@ class WhisperDataset(Dataset):
             True, language=language, task="transcribe"
         )
 
+        self.max_tokens = max_tokens
+
         # Concatenate samples
         self.concat_samples = concat_samples
 
         if self.concat_samples:
+            print("🔗 Concatenating samples to maximize usage of 30-second window")
             self.grouped_indices = self._group_samples()
 
             # # Process all samples once to gather statistics
@@ -151,8 +155,7 @@ class WhisperDataset(Dataset):
             ) + self.tokenizer.encode(example[self.txt_label])
 
             # Pad tokens
-            max_tokens = 200
-            rpad = max_tokens - len(tokens)
+            rpad = self.max_tokens - len(tokens)
 
             in_ttoks = F.pad(
                 torch.tensor(tokens, dtype=torch.long),
@@ -215,8 +218,7 @@ class WhisperDataset(Dataset):
         ) + self.tokenizer.encode(concatenated_text)
 
         # Pad tokens
-        max_tokens = 200  # TODO: don't hardcode this (default 200)
-        rpad = max_tokens - len(tokens)
+        rpad = self.max_tokens - len(tokens)
 
         in_ttoks = F.pad(
             torch.tensor(tokens, dtype=torch.long),
@@ -268,6 +270,7 @@ def load_whisper_dataset(
     num_samples: Optional[int] = None,
     weight: float = 1.0,
     concat_samples: bool = True,
+    max_tokens: int = 200,
 ) -> WeightedDataset:
     """Load dataset with weight"""
     split = "validation" if validation else "train"
@@ -280,6 +283,7 @@ def load_whisper_dataset(
         language=language,
         num_samples=num_samples,
         concat_samples=concat_mode,
+        max_tokens=max_tokens,
     )
     return WeightedDataset(dataset, weight)
 
