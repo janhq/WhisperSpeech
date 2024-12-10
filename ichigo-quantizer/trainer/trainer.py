@@ -239,6 +239,12 @@ class WhisperVQTrainer:
             model, self.config, train_dataset_size=train_dataset_size
         )
 
+        # TODO: resume training w/o state dict, rmv part ckpt_path in fit
+        # if self.config.resume_from:
+        #     lightning_module.load_state_dict(
+        #         torch.load(self.config.resume_from)["state_dict"], strict=False
+        #     )
+
         self.trainer.fit(
             model=lightning_module,
             train_dataloaders=train_loader,
@@ -317,7 +323,7 @@ class WhisperVQTrainer:
                         "predicted_output": pred_text,
                         "whisper_output": whisper_text,
                     }
-
+                    # print(result_dict)
                     predictions_table.add_data(
                         result_dict["audio_id"],
                         result_dict["ground_truth"],
@@ -325,7 +331,6 @@ class WhisperVQTrainer:
                         result_dict["whisper_output"],
                     )
 
-                    # print(result_dict)
                     results.append(result_dict)
                     audio_id_counter += 1
                     progress_bar.update(1)

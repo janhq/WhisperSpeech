@@ -290,6 +290,8 @@ class RQBottleneckTransformer(nn.Module):
         self.kl_loss = self.kl_lossf(
             F.log_softmax(logits, dim=-1), F.softmax(teacher_logits, dim=-1)
         )
+        # TODO: turn of KL Loss
+        # self.kl_loss = 0
         loss = self.ce_loss + self.kl_loss_mul * self.kl_loss
 
         if not self.no_quantize:
