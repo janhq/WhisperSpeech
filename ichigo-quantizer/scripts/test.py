@@ -1,5 +1,8 @@
 import sys
+import warnings
 from pathlib import Path
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
@@ -29,6 +32,9 @@ def parse_args():
     parser.add_argument(
         "--batch-size", type=int, default=100, help="Batch size for evaluation"
     )
+    parser.add_argument(
+        "--num-samples", type=int, default=None, help="Number of samples"
+    )
     return parser.parse_args()
 
 
@@ -52,6 +58,7 @@ def main():
     test_dataset = load_test_dataset(
         dataset_dir=args.test_data,
         language=args.language,
+        num_samples=args.num_samples,
     )
 
     # Create trainer and get predictions
