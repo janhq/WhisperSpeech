@@ -370,18 +370,18 @@ class RQBottleneckTransformer(nn.Module):
         self.val_total[:] = 0
         return metrics
 
-    def setup(self, device):
+    def setup(self, device, language):
         """Setup the model on specified device"""
-        self.ensure_whisper(device)
+        self.ensure_whisper(device=device, language=language)
 
-    def ensure_whisper(self, device=None):
+    def ensure_whisper(self, device=None, language=None):
         """Ensure Whisper model is loaded"""
         if self.whmodel is not None:
             return
         device = device or self.device
         if self.whmodel is None:
             self.whmodel = [whisper.load_model(self.whisper_model_name, device=device)]
-        self.decoding_options = whisper.DecodingOptions()
+        self.decoding_options = whisper.DecodingOptions(language=language)
         self.tokenizer = get_tokenizer(self.whisper_model_name, None)
 
     @property
