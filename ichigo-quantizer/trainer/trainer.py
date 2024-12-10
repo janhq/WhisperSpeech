@@ -4,7 +4,11 @@ import torch
 import pandas as pd
 import lightning.pytorch as pl
 from lightning.pytorch.loggers import WandbLogger
-from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
+from lightning.pytorch.callbacks import (
+    ModelCheckpoint,
+    LearningRateMonitor,
+    EarlyStopping,
+)
 from lightning.fabric.utilities.rank_zero import rank_zero_only
 from config.trainer_config import TrainerConfig
 from trainer.lightning_module import WhisperVQModule
@@ -129,6 +133,12 @@ class WhisperVQTrainer:
                 save_on_train_epoch_end=False,
             ),
             LearningRateMonitor(logging_interval="step"),
+            EarlyStopping(
+                monitor=self.config.monitored_metric,
+                patience=self.config.early_stopping_patience,
+                mode="min",
+                verbose=True,
+            ),
         ]
 
     def _setup_trainer(self):

@@ -56,6 +56,7 @@ class TrainerConfig:
     batch_size: int = 16
     accumulate_grad_batches: int = 1
     validate_every_n_steps: int = 500
+    early_stopping_patience: int = 10
 
     # Hardware/Performance settings
     num_workers: int = 8
@@ -119,6 +120,7 @@ class TrainerConfig:
             "batch_size": self.batch_size,
             "accumulate_grad_batches": self.accumulate_grad_batches,
             "validate_every_n_steps": self.validate_every_n_steps,
+            "early_stopping_patience": self.early_stopping_patience,
             # Hardware settings
             "strategy": self.strategy,
             "precision": self.precision,
