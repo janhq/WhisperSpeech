@@ -37,6 +37,8 @@ class WhisperDataset(Dataset):
         if "libritts_r_filtered" in dataset_dir:
             if split == "validation":
                 self.dataset = load_dataset(dataset_dir, "clean", split="dev.clean")
+            elif split == "test":
+                self.dataset = load_dataset(dataset_dir, "clean", split="test.clean")
             else:
                 self.dataset = load_dataset(
                     dataset_dir, "clean", split="train.clean.360"

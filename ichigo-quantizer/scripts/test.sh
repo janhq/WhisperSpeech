@@ -1,8 +1,7 @@
 WANDB_ENTITY="janai" CUDA_VISIBLE_DEVICES=0 python -m scripts.test \
     --model-path "checkpoints/loss=0.19.ckpt" \
-    --test-data "linhtran92/viet_bud500" \
+    --test-data "parler-tts/libritts_r_filtered" \
     --model-size "medium-vi-2d-2048c-dim64" \
     --whisper-name "medium" \
-    --language "vi" \
-    --batch-size 80 \
-    --num-samples None
+    --language "en" \
+    --batch-size 80
