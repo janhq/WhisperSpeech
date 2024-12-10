@@ -179,39 +179,40 @@ class RQBottleneckTransformer(nn.Module):
         torch.nn.init.constant_(m.bias, 0)
         torch.nn.init.constant_(m.weight, 1)
 
-    def forward(self, samples, mask, input_toks, output_toks):
+    def forward(self, samples, mask=None, input_toks=None, output_toks=None):
         """
         Forward pass of the model.
-
         Args:
             samples (torch.Tensor): Input audio samples [B, 1, T]
-            mask (torch.Tensor): Attention mask [B, 1, T]
-            input_toks (torch.Tensor): Input tokens [B, 1, S]
-            output_toks (torch.Tensor): Target output tokens [B, 1, S]
-
+            mask (torch.Tensor, optional): Attention mask [B, 1, T] (only for training)
+            input_toks (torch.Tensor, optional): Input tokens [B, 1, S] (only for training)
+            output_toks (torch.Tensor, optional): Target output tokens [B, 1, S] (only for training)
         Returns:
-            tuple: (None, logits, loss) where logits are the model predictions
-                  and loss is the combined training loss
+            During training: tuple (list_loss, logits, loss)
+            During inference: Whisper decoded result
         """
-        # Extract teacher embeddings and logits
+        if not self.training:
+            mel_specs = self.log_mel_spectrogram(samples)
+            embs = self.whmodel[0].encoder(mel_specs)
+
+            if not self.no_quantize:
+                x = self._process_quantization(embs)
+                return self.whmodel[0].decode(x, self.decoding_options)
+            else:
+                return self.whmodel[0].decode(embs, self.decoding_options)
+
+        # Training mode: Extract teacher embeddings and logit
         embs, teacher_logits = self.extract_teacher(samples, input_toks, output_toks)
 
         if not self.no_quantize:
             # Process through quantization pipeline
             x = self._process_quantization(embs, mask)
-
-            # Ensure input_toks is 2D by squeezing extra dimension
-            input_toks_2d = input_toks.squeeze(1)
-
-            # Get final logits and compute loss
-            logits = self.whmodel[0].decoder(input_toks_2d, x)
+            logits = self.whmodel[0].decoder(input_toks.squeeze(1), x)
             loss, list_loss = self._compute_loss(
                 logits, output_toks.squeeze(1), teacher_logits
             )
         else:
-            # No quantization mode
-            input_toks_2d = input_toks.squeeze(1)
-            logits = self.whmodel[0].decoder(input_toks_2d, embs)
+            logits = self.whmodel[0].decoder(input_toks.squeeze(1), embs)
             loss, list_loss = self._compute_loss(
                 logits, output_toks.squeeze(1), teacher_logits
             )
@@ -223,7 +224,7 @@ class RQBottleneckTransformer(nn.Module):
 
         return list_loss, logits, loss
 
-    def _process_quantization(self, embs, mask):
+    def _process_quantization(self, embs, mask=None):
         """
         Process embeddings through the quantization pipeline.
 
@@ -261,15 +262,15 @@ class RQBottleneckTransformer(nn.Module):
         # Post-quantization processing
         x = quantized.repeat_interleave(self.downsample, -2)
 
-        # Handle masked embeddings
-        if self.config.mask_embs:
+        # Handle masked embeddings only during training
+        if self.training and self.config.mask_embs and mask is not None:
             project_out = (
                 getattr(self.rq, "project_out", None) or self.rq.layers[0].project_out
             )
             x[~mask] = project_out(self.rq.layers[0]._codebook.embed[0, self.vq_codes])
 
         # Add positional embeddings and apply transformer
-        x = x + self.positional_embedding(self.positions.to("cuda"))
+        x = x + self.positional_embedding(self.positions.to(x.device))
         x = self.ln_post(self.out_blocks(x))
 
         return x

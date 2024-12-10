@@ -314,23 +314,15 @@ class WhisperVQTrainer:
                 test_loader
             ):
                 samples = samples.cuda()
-                mask = mask.cuda()
-                input_toks = input_toks.cuda()
-                output_toks = output_toks.cuda()
-
-                _, logits, _ = model(samples, mask, input_toks, output_toks)
+                decoded_results = model(samples)
 
                 for i in range(len(samples)):
-                    # ! GT
                     gt_tokens = output_toks[i][output_toks[i] != -100]
                     ground_truth = model.tokenizer.decode(gt_tokens.tolist())
                     ground_truth = clean_whisper_text(ground_truth)
 
                     # ! Process model predictions
-                    pred_logits = logits[i][: len(gt_tokens)]
-                    pred_tokens = pred_logits.argmax(dim=-1)
-                    pred_text = model.tokenizer.decode(pred_tokens.tolist())
-                    pred_text = clean_whisper_text(pred_text)
+                    pred_text = clean_whisper_text(decoded_results[i].text)
 
                     #! Process Whisper predictions
                     audio_sample = samples[i].cpu().numpy()
