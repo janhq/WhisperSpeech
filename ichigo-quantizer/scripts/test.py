@@ -53,7 +53,7 @@ def main():
     lightning_module.load_from_checkpoint(args.model_path)
     model = lightning_module.model
 
-    model.setup(device="cuda")
+    model.setup(device="cuda", language=args.language)
 
     test_dataset = load_test_dataset(
         dataset_dir=args.test_data,

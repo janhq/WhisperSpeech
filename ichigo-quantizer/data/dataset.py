@@ -34,6 +34,8 @@ class WhisperDataset(Dataset):
         concat_samples: bool = True,
         max_tokens: int = 200,
     ):
+        self.split = split
+
         if "libritts_r_filtered" in dataset_dir:
             if split == "validation":
                 self.dataset = load_dataset(dataset_dir, "clean", split="dev.clean")
@@ -126,6 +128,42 @@ class WhisperDataset(Dataset):
         return F.pad(audio, (0, self.max_audio_length - len(audio)), value=0)
 
     def __getitem__(self, idx):
+        if self.split == "test":
+            example = self.dataset[idx]
+
+            samples = torch.tensor(example["audio"]["array"], dtype=torch.float32)
+
+            if example["audio"]["sampling_rate"] != 16000:
+                resampler = torchaudio.transforms.Resample(
+                    example["audio"]["sampling_rate"], 16000
+                )
+                samples = resampler(samples)
+
+            # Normalize audio
+            if samples.abs().max() > 0:
+                samples = samples / samples.abs().max()
+
+            # Pad audio
+            samples = self.pad_audio(samples)
+
+            if samples.abs().max() > 0:
+                samples = samples / samples.abs().max()
+
+            # Process text tokens
+            tokens = list(
+                self.tokenizer.sot_sequence_including_notimestamps
+            ) + self.tokenizer.encode(example[self.txt_label])
+
+            # Pad tokens
+            rpad = self.max_tokens - len(tokens)
+            output_toks = F.pad(
+                torch.tensor(tokens, dtype=torch.long),
+                (0, rpad),
+                value=self.tokenizer.eot,
+            )
+
+            return samples, output_toks
+
         if not self.concat_samples:
             # Get single sample
             example = self.dataset[idx]

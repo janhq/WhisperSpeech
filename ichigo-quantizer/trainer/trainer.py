@@ -310,27 +310,18 @@ class WhisperVQTrainer:
         )
 
         with torch.no_grad():
-            for batch_idx, (samples, mask, input_toks, output_toks) in enumerate(
-                test_loader
-            ):
+            for batch_idx, (samples, output_toks) in enumerate(test_loader):
                 samples = samples.cuda()
-                mask = mask.cuda()
-                input_toks = input_toks.cuda()
-                output_toks = output_toks.cuda()
-
-                _, logits, _ = model(samples, mask, input_toks, output_toks)
+                # TODO: recheck inference code
+                decoded_results = model.inference(samples)
 
                 for i in range(len(samples)):
-                    # ! GT
                     gt_tokens = output_toks[i][output_toks[i] != -100]
                     ground_truth = model.tokenizer.decode(gt_tokens.tolist())
                     ground_truth = clean_whisper_text(ground_truth)
 
                     # ! Process model predictions
-                    pred_logits = logits[i][: len(gt_tokens)]
-                    pred_tokens = pred_logits.argmax(dim=-1)
-                    pred_text = model.tokenizer.decode(pred_tokens.tolist())
-                    pred_text = clean_whisper_text(pred_text)
+                    pred_text = clean_whisper_text(decoded_results[i].text)
 
                     #! Process Whisper predictions
                     audio_sample = samples[i].cpu().numpy()
