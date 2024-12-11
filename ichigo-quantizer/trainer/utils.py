@@ -36,6 +36,7 @@ def clean_whisper_text(text: str) -> str:
         "<|notimestamps|>",
         "<|nospeech|>",
         "<|endoftext|>",
+        "<|startoftranscript|>",
     ]
     for token in special_tokens:
         text = text.replace(token, "")
