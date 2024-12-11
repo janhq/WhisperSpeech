@@ -310,11 +310,10 @@ class WhisperVQTrainer:
         )
 
         with torch.no_grad():
-            for batch_idx, (samples, mask, input_toks, output_toks) in enumerate(
-                test_loader
-            ):
+            for batch_idx, (samples, output_toks) in enumerate(test_loader):
                 samples = samples.cuda()
-                decoded_results = model(samples)
+                # TODO: recheck inference code
+                decoded_results = model.inference(samples)
 
                 for i in range(len(samples)):
                     gt_tokens = output_toks[i][output_toks[i] != -100]
