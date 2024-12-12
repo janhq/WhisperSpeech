@@ -6,7 +6,6 @@ WANDB_ENTITY="janai" python -m scripts.train \
     --tunables "--rope --mask_embs --downsample_mean" \
     --wandb-task-name "ichigo-quantizer" \
     --concat-samples \
-    --max-tokens 200 \
     --run-name "resume concat 100e 2048 - 512 dup_noise - bs42 - max_token200 - mix_data_73 concat true - remove_kl - 100e - ddp8" \
     --resume-from "checkpoints/vq_stoks/vq_stoks-init ckpt 2048 - 512 dup_noise - bs42 - max_token200 - mix_data_73 - wo_w_loss - 100e - ddp8-step=16248-val/loss=2.97.ckpt"
 # --load-checkpoint "checkpoints/whisper-vq-stoks-v3-7lang.model"
