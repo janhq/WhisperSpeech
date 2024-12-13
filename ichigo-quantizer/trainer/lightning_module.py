@@ -1,10 +1,11 @@
-import torch
-import torch._dynamo
 import lightning.pytorch as pl
 import pandas as pd
+import torch
+import torch._dynamo
+from lightning.fabric.utilities.rank_zero import rank_zero_only
+
 from models.vq_transformer import RQBottleneckTransformer
 from trainer.wer_metrics import compute_wer_cer
-from lightning.fabric.utilities.rank_zero import rank_zero_only
 
 
 class WhisperVQModule(pl.LightningModule):

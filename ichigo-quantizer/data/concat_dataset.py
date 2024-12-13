@@ -1,12 +1,18 @@
 # TODO: fix transcription column name
-from typing import Optional, List
+from typing import List, Optional
+
 import torch
 import torch.nn.functional as F
 import torchaudio
 import whisper
-from datasets import load_dataset, Dataset, Features, Array2D, DatasetDict
-from datasets import Value, Sequence
-
+from datasets import (
+    Dataset,
+    DatasetDict,
+    Features,
+    Sequence,
+    Value,
+    load_dataset,
+)
 from tqdm import tqdm
 
 

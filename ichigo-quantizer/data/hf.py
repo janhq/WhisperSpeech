@@ -1,5 +1,4 @@
-from huggingface_hub import hf_hub_download
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, hf_hub_download
 
 
 def download_hf(repo_id, file_name, local_dir=None):

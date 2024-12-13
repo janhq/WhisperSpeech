@@ -1,6 +1,7 @@
 import dataclasses
-from typing import List, Optional
 from pathlib import Path
+from typing import List, Optional
+
 from .vq_config import VQConfig
 
 

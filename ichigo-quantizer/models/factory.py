@@ -1,5 +1,5 @@
-from models.vq_transformer import RQBottleneckTransformer
 from config.vq_config import VQConfig
+from models.vq_transformer import RQBottleneckTransformer
 
 
 def make_vq_model(

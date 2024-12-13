@@ -1,24 +1,26 @@
 import os
 from pathlib import Path
-import torch
-import pandas as pd
+
 import lightning.pytorch as pl
-from lightning.pytorch.loggers import WandbLogger
-from lightning.pytorch.callbacks import (
-    ModelCheckpoint,
-    LearningRateMonitor,
-    EarlyStopping,
-)
+import pandas as pd
+import torch
+import whisper
+from evaluate import load
 from lightning.fabric.utilities.rank_zero import rank_zero_only
+from lightning.pytorch.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
+from lightning.pytorch.loggers import WandbLogger
+from torch.utils.data import ConcatDataset, DataLoader, WeightedRandomSampler
+from tqdm import tqdm
+from transformers import pipeline
+
+import wandb
 from config.trainer_config import TrainerConfig
 from trainer.lightning_module import WhisperVQModule
 from trainer.utils import clean_whisper_text
-from torch.utils.data import DataLoader, WeightedRandomSampler, ConcatDataset
-import whisper
-from tqdm import tqdm
-import wandb
-from evaluate import load
-from transformers import pipeline
 
 
 class WhisperVQTrainer:

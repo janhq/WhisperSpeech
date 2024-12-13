@@ -1,5 +1,5 @@
-from torch.utils.data import DataLoader
 import regex as re
+from torch.utils.data import DataLoader
 
 
 def setup_dataloaders(train_dataset, val_dataset, config):

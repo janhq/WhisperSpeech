@@ -1,11 +1,12 @@
-from typing import Tuple, Optional, List
-from torch.utils.data import Dataset, ConcatDataset
-from datasets import load_dataset
+from typing import List, Optional
+
 import torch
 import torch.nn.functional as F
 import torchaudio
 import whisper
+from datasets import load_dataset
 from lightning.fabric.utilities.rank_zero import rank_zero_only
+from torch.utils.data import ConcatDataset, Dataset
 
 
 class WeightedDataset(Dataset):

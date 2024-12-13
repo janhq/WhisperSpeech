@@ -1,13 +1,15 @@
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import whisper
-from vector_quantize_pytorch import ResidualVQ
 from huggingface_hub import hf_hub_download
-from models.modules import LayerNorm
-from models.layers import ResidualAttentionBlock
+from vector_quantize_pytorch import ResidualVQ
+
 from data.utils import get_tokenizer
+from models.layers import ResidualAttentionBlock
+from models.modules import LayerNorm
 
 
 class RQBottleneckTransformer(nn.Module):
