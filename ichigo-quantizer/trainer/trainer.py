@@ -131,26 +131,27 @@ class WhisperVQTrainer:
             # Best checkpoint based on validation loss
             ModelCheckpoint(
                 dirpath=self.config.checkpoint_dir,
-                filename=f"{self.config.task}/{self.run_name}/best-{{epoch}}-{{step}}-{{val/loss:.2f}}",
-                monitor=self.config.monitored_metric,
+                filename=f"{self.config.task}/{self.run_name}/best-{{epoch}}-{{step}}-{{val/epoch_accuracy:.2f}}",
+                monitor="val/epoch_accuracy",
                 save_top_k=1,
-                mode="min",
+                mode="max",
                 save_on_train_epoch_end=False,
+                verbose=True if rank_zero_only.rank == 0 else False,
             ),
             # Periodic checkpoint every epoch
             ModelCheckpoint(
                 dirpath=self.config.checkpoint_dir,
-                filename=f"{self.config.task}/{self.run_name}/epoch-{{epoch}}-{{step}}-{{val/loss:.2f}}",
+                filename=f"{self.config.task}/{self.run_name}/epoch-{{epoch}}-{{step}}-{{val/epoch_accuracy:.2f}}",
                 save_top_k=-1,
                 every_n_epochs=1,
                 save_on_train_epoch_end=True,
             ),
             LearningRateMonitor(logging_interval="step"),
             EarlyStopping(
-                monitor=self.config.monitored_metric,
+                monitor="val/epoch_accuracy",
                 patience=self.config.early_stopping_patience,
-                mode="min",
-                verbose=True,
+                mode="max",
+                verbose=True if rank_zero_only.rank == 0 else False,
             ),
         ]
 

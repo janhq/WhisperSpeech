@@ -44,11 +44,6 @@ def parse_args():
     )
     parser.add_argument("--wandb-task-name", type=str, required=True)
     parser.add_argument("--run-name", type=str, required=True)
-    parser.add_argument(
-        "--concat-samples",
-        action="store_true",
-        help="concatenate samples, default is False",
-    )
     parser.add_argument("--max-tokens", type=int, default=200)
     return parser.parse_args()
 
@@ -155,15 +150,15 @@ def main():
         {
             "dataset_dir": "linhtran92/viet_bud500",
             "language": "vi",
-            "weight": 0.2,
-            "concat_samples": args.concat_samples,
+            "weight": 0.5,
+            "concat_samples": True,
             "max_tokens": args.max_tokens,
         },
         {
             "dataset_dir": "parler-tts/libritts_r_filtered",
             "language": "en",
-            "weight": 0.8,
-            "concat_samples": args.concat_samples,
+            "weight": 0.5,
+            "concat_samples": False,
             "max_tokens": args.max_tokens,
         },
     ]

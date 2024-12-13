@@ -7,6 +7,7 @@ import whisper
 from datasets import load_dataset
 from lightning.fabric.utilities.rank_zero import rank_zero_only
 from torch.utils.data import ConcatDataset, Dataset
+from tqdm import tqdm
 
 
 class WeightedDataset(Dataset):
@@ -77,7 +78,9 @@ class WhisperDataset(Dataset):
         self.concat_samples = concat_samples
 
         if self.concat_samples:
-            print("🔗 Concatenating samples to maximize usage of 30-second window")
+            print(
+                f"🔗 Concatenating {dataset_dir} samples to maximize usage of 30-second window"
+            )
             self.grouped_indices = self._group_samples()
 
             # # Process all samples once to gather statistics
@@ -98,7 +101,11 @@ class WhisperDataset(Dataset):
         current_group = []
         current_duration = 0.0
 
-        for idx in range(len(self.dataset)):
+        for idx in tqdm(
+            range(len(self.dataset)),
+            desc="Grouping samples",
+            disable=rank_zero_only.rank != 0,
+        ):
             duration = self._get_audio_duration(self.dataset[idx])
 
             if current_duration + duration <= 30.0:
@@ -106,9 +113,6 @@ class WhisperDataset(Dataset):
                 current_duration += duration
             else:
                 if current_group:
-                    # print(
-                    #     f"✓ Group {len(groups)}: {len(current_group)} samples, duration: {current_duration:.2f}s"
-                    # )
                     groups.append(current_group)
                 current_group = [idx]
                 current_duration = duration
