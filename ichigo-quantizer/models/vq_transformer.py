@@ -1,14 +1,16 @@
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import whisper
-from vector_quantize_pytorch import ResidualVQ
 from huggingface_hub import hf_hub_download
-from models.modules import LayerNorm
-from models.layers import ResidualAttentionBlock
+from vector_quantize_pytorch import ResidualVQ
+
 from data.utils import get_tokenizer
 import torchaudio
+from models.layers import ResidualAttentionBlock
+from models.modules import LayerNorm
 
 
 class RQBottleneckTransformer(nn.Module):
@@ -284,7 +286,7 @@ class RQBottleneckTransformer(nn.Module):
         self.kl_loss = self.kl_lossf(
             F.log_softmax(logits, dim=-1), F.softmax(teacher_logits, dim=-1)
         )
-        # TODO: turn of KL Loss
+        # TODO: args turn off KL Loss phase 1 and 2
         # self.kl_loss = 0
         loss = self.ce_loss + self.kl_loss_mul * self.kl_loss
 
@@ -413,11 +415,11 @@ class RQBottleneckTransformer(nn.Module):
         self.val_total[:] = 0
         return metrics
 
-    def setup(self, device, language):
+    def setup(self, device, language=None):
         """Setup the model on specified device"""
         self.ensure_whisper(device=device, language=language)
 
-    def ensure_whisper(self, device=None, language=None):
+    def ensure_whisper(self, device=None, language=None, is_train=None):
         """Ensure Whisper model is loaded"""
         if self.whmodel is not None:
             return
@@ -425,6 +427,7 @@ class RQBottleneckTransformer(nn.Module):
         if self.whmodel is None:
             self.whmodel = [whisper.load_model(self.whisper_model_name, device=device)]
         if language is not None:
+            print(f"Setting decoding options for {language}")
             self.decoding_options = whisper.DecodingOptions(language=language)
         else:
             self.decoding_options = whisper.DecodingOptions()

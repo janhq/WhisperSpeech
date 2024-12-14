@@ -8,12 +8,13 @@ project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
 
 import argparse
+
 from config.trainer_config import TrainerConfig
 from config.vq_config import VQConfig
-from models.factory import make_vq_model
-from trainer.trainer import WhisperVQTrainer
 from data.dataset import load_test_dataset
+from models.factory import make_vq_model
 from trainer.lightning_module import WhisperVQModule
+from trainer.trainer import WhisperVQTrainer
 
 
 def parse_args():

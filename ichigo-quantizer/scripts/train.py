@@ -8,12 +8,14 @@ project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
 
 import argparse
+
 import torch
+
 from config.trainer_config import TrainerConfig
 from config.vq_config import VQConfig
+from data.dataset import load_multiple_datasets
 from models.factory import make_vq_model
 from trainer.trainer import WhisperVQTrainer
-from data.dataset import load_multiple_datasets
 
 
 def parse_args():
@@ -42,11 +44,6 @@ def parse_args():
     )
     parser.add_argument("--wandb-task-name", type=str, required=True)
     parser.add_argument("--run-name", type=str, required=True)
-    parser.add_argument(
-        "--concat-samples",
-        action="store_true",
-        help="concatenate samples, default is False",
-    )
     parser.add_argument("--max-tokens", type=int, default=200)
     return parser.parse_args()
 
@@ -70,35 +67,6 @@ def load_state_dict_flexible(model, state_dict):
             print(
                 f"Reshaping key {key}: {state_dict[key].shape} -> {model_state[key].shape}"
             )
-            # STABLE: Kaiming
-            # if "codebook" in key:
-            #     # Handle codebook resizing
-            #     old_size = state_dict[key].shape[1]  # 512
-            #     new_size = model_state[key].shape[1]  # 1024
-            #     if new_size > old_size:
-            #         # Create new empty tensor with target shape (1024)
-            #         new_tensor = torch.empty_like(model_state[key])
-            #         # Copy existing codebook entries (0-511)
-            #         new_tensor[:, :old_size, ...] = state_dict[key]
-
-            #         # For remaining entries (512-1023) #FIXME: AVG
-            #         # mean = state_dict[key].mean(dim=1, keepdim=True)
-            #         # std = state_dict[key].std(dim=1, keepdim=True)
-            #         # # Generate random values around the mean with small variance
-            #         # noise = torch.randn_like(new_tensor[:, old_size:, ...]) * std * 0.1
-            #         # new_tensor[:, old_size:, ...] = mean + noise
-            #         # state_dict[key] = new_tensor
-
-            #         # Kaiming initialization
-            #         fan_in = new_tensor.size(-1)
-            #         bound = torch.sqrt(torch.tensor(2.0 / fan_in))
-            #         new_tensor[:, old_size:, ...].normal_(0, bound.item())
-            #         state_dict[key] = new_tensor
-            #     else:
-            #         # Truncate
-            #         state_dict[key] = state_dict[key][:, :new_size, ...]
-
-            # TEST: Duplicate w/ noise
             if "codebook" in key:
                 # Handle codebook resizing
                 old_size = state_dict[key].shape[1]  # 512
@@ -182,15 +150,15 @@ def main():
         {
             "dataset_dir": "linhtran92/viet_bud500",
             "language": "vi",
-            "weight": 0.7,
-            "concat_samples": args.concat_samples,
+            "weight": 0.5,
+            "concat_samples": True,
             "max_tokens": args.max_tokens,
         },
         {
             "dataset_dir": "parler-tts/libritts_r_filtered",
             "language": "en",
-            "weight": 0.3,
-            "concat_samples": args.concat_samples,
+            "weight": 0.5,
+            "concat_samples": False,
             "max_tokens": args.max_tokens,
         },
     ]

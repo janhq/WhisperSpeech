@@ -1,6 +1,7 @@
 import dataclasses
-from typing import List, Optional
 from pathlib import Path
+from typing import List, Optional
+
 from .vq_config import VQConfig
 
 
@@ -73,7 +74,6 @@ class TrainerConfig:
     # Model and optimization parameters
     vq_config: VQConfig = None
     lr_schedule: str = "linear"
-    monitored_metric: str = "val/loss"
 
     # Checkpoint handling
     resume_from: Optional[Path] = None

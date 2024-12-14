@@ -1,24 +1,26 @@
 import os
 from pathlib import Path
-import torch
-import pandas as pd
+
 import lightning.pytorch as pl
-from lightning.pytorch.loggers import WandbLogger
-from lightning.pytorch.callbacks import (
-    ModelCheckpoint,
-    LearningRateMonitor,
-    EarlyStopping,
-)
+import pandas as pd
+import torch
+import whisper
+from evaluate import load
 from lightning.fabric.utilities.rank_zero import rank_zero_only
+from lightning.pytorch.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
+from lightning.pytorch.loggers import WandbLogger
+from torch.utils.data import ConcatDataset, DataLoader, WeightedRandomSampler
+from tqdm import tqdm
+from transformers import pipeline
+
+import wandb
 from config.trainer_config import TrainerConfig
 from trainer.lightning_module import WhisperVQModule
 from trainer.utils import clean_whisper_text
-from torch.utils.data import DataLoader, WeightedRandomSampler, ConcatDataset
-import whisper
-from tqdm import tqdm
-import wandb
-from evaluate import load
-from transformers import pipeline
 
 
 class WhisperVQTrainer:
@@ -120,24 +122,36 @@ class WhisperVQTrainer:
         Initialize PyTorch Lightning callbacks.
 
         Sets up:
-        1. ModelCheckpoint: For saving model checkpoints based on validation metrics
-        2. LearningRateMonitor: For tracking learning rate changes
+        1. ModelCheckpoint for best validation loss
+        2. ModelCheckpoint for periodic epoch saves
+        3. LearningRateMonitor
+        4. EarlyStopping
         """
         self.callbacks = [
+            # Best checkpoint based on validation loss
             ModelCheckpoint(
                 dirpath=self.config.checkpoint_dir,
-                filename=f"{self.config.task}/{self.run_name}/{{epoch}}-{{step}}-{{val/loss:.2f}}",
-                monitor=self.config.monitored_metric,
+                filename=f"{self.config.task}/{self.run_name}/best-{{epoch}}-{{step}}-{{val/epoch_accuracy:.2f}}",
+                monitor="val/epoch_accuracy",
                 save_top_k=1,
-                mode="min",
+                mode="max",
                 save_on_train_epoch_end=False,
+                verbose=True if rank_zero_only.rank == 0 else False,
+            ),
+            # Periodic checkpoint every epoch
+            ModelCheckpoint(
+                dirpath=self.config.checkpoint_dir,
+                filename=f"{self.config.task}/{self.run_name}/epoch-{{epoch}}-{{step}}-{{val/epoch_accuracy:.2f}}",
+                save_top_k=-1,
+                every_n_epochs=1,
+                save_on_train_epoch_end=True,
             ),
             LearningRateMonitor(logging_interval="step"),
             EarlyStopping(
-                monitor=self.config.monitored_metric,
+                monitor="val/epoch_accuracy",
                 patience=self.config.early_stopping_patience,
-                mode="min",
-                verbose=True,
+                mode="max",
+                verbose=True if rank_zero_only.rank == 0 else False,
             ),
         ]
 
@@ -188,7 +202,37 @@ class WhisperVQTrainer:
         2. Wraps the model in a Lightning module
         3. Executes the training
         4. Saves the final model (on rank 0 only)
+
+        #!  What happens during training example:
+        1. Total samples = 700K (all samples are included)
+        2. For each training step:
+        - Vietnamese samples have 0.7 probability of being selected
+        - English samples have 0.3 probability of being selected
+
+        # Approximate sampling distribution:
+        - Vietnamese: (500K * 0.7) / (500K * 0.7 + 200K * 0.3) ≈ 85% chance
+        - English: (200K * 0.3) / (500K * 0.7 + 200K * 0.3) ≈ 15% chance
         """
+        # Add statistics printing at the start
+        if isinstance(train_dataset, ConcatDataset):
+            total_samples = sum(
+                len(dataset.dataset) for dataset in train_dataset.datasets
+            )
+            if rank_zero_only.rank == 0:
+                print("\n=== Dataset Statistics ===")
+                for i, dataset in enumerate(train_dataset.datasets):
+                    weight = dataset.weight
+                    size = len(dataset.dataset)
+                    effective_ratio = (size * weight) / sum(
+                        len(d.dataset) * d.weight for d in train_dataset.datasets
+                    )
+                    print(f"Dataset {i}:")
+                    print(f"  - Size: {size:,} samples")
+                    print(f"  - Weight: {weight}")
+                    print(f"  - Effective sampling ratio: {effective_ratio:.1%}")
+                print(f"Total samples available: {total_samples:,}")
+                print("=====================\n")
+
         # Train DataLoader
         if isinstance(train_dataset, ConcatDataset):
             weights = []
@@ -211,6 +255,7 @@ class WhisperVQTrainer:
                 num_workers=self.config.num_workers,
                 pin_memory=True,
             )
+
         else:
             train_loader = DataLoader(
                 train_dataset,
@@ -242,9 +287,6 @@ class WhisperVQTrainer:
             )
 
         train_dataset_size = len(train_dataset)
-
-        if rank_zero_only.rank == 0:
-            print(f"🥹 Training dataset size: {train_dataset_size}")
 
         lightning_module = WhisperVQModule(
             model, self.config, train_dataset_size=train_dataset_size
