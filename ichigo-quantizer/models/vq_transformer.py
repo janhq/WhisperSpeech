@@ -270,48 +270,6 @@ class RQBottleneckTransformer(nn.Module):
 
         return x
 
-    def inference(self, samples):
-        """Perform inference on input samples"""
-        with torch.no_grad():
-            # Encode Mel
-            mel = self.log_mel_spectrogram(samples)
-            embs = self.whmodel[0].encoder(mel)
-
-            # Quantize
-            x = self.downsample_embeddings(embs)
-            x = x + self.mlp(self.mlp_ln(x))
-            _, stoks, _ = self.rq(x)  # quantizer.shape = (1, 750, 1024)
-            if self.q_depth == 1:
-                stoks = stoks.squeeze()
-
-            # Dequantize
-            assert self.q_depth == 1
-            assert len(stoks.shape) == 1, "batch processing is not supported"
-
-            padding = torch.nonzero(stoks == self.vq_codes)
-            if padding.any():
-                stoks = stoks[: padding[0, 0]]
-            stoks = F.pad(
-                stoks,
-                (0, self.stoks_len - stoks.shape[-1]),
-                value=self.vq_codes if self.config.mask_embs else 0,
-            )  # 750
-            x = self.rq.layers[0]._codebook.embed[
-                0, stoks.to(torch.long).view(-1)
-            ]  # (750, 64)
-            x = x.repeat_interleave(self.downsample, -2)  # (1500, 64)
-            project_out = (
-                getattr(self.rq, "project_out", None) or self.rq.layers[0].project_out
-            )
-            x = project_out(x).unsqueeze(0)  # (1500, 1024)
-            positions = torch.arange(0, x.shape[-2], dtype=torch.long, device=x.device)
-            x = x + self.positional_embedding(positions)
-
-            dequantize_embed = self.ln_post(self.out_blocks(x))
-
-            # Decode text
-            return self.whmodel[0].decode(dequantize_embed, self.decoding_options)
-
     def _compute_loss(self, logits, output_toks, teacher_logits):
         """
         Compute the total loss combining CE, KL, and commitment losses.
@@ -345,6 +303,71 @@ class RQBottleneckTransformer(nn.Module):
             .sum()
         )
         self.val_total += valid_toks.float().sum()
+
+    @torch.no_grad()
+    def quantize(self, audio):
+        if isinstance(audio, str):
+            x, sr = torchaudio.load(audio)
+            x = torchaudio.transforms.Resample(sr, 16000)(x)[0]
+            audio = x.unsqueeze(0)
+
+        audio_max_length = 30 * 16000
+        if audio.shape[-1] > audio_max_length:
+            audio = audio[:audio_max_length]
+        else:
+            audio = F.pad(audio, (0, audio_max_length - audio.shape[-1]), value=0)
+
+        # Encode Mel
+        mel = self.log_mel_spectrogram(audio)
+        embs = self.whmodel[0].encoder(mel)
+
+        # Quantize
+        x = self.downsample_embeddings(embs)
+        x = x + self.mlp(self.mlp_ln(x))
+        _, stoks, _ = self.rq(x)  # quantizer.shape = (1, 750, 1024)
+        stoks = stoks.squeeze()
+
+        return stoks
+
+    def dequantize(self, stoks):
+        # Dequantize
+        assert self.q_depth == 1
+        assert len(stoks.shape) == 1, "batch processing is not supported"
+
+        padding = torch.nonzero(stoks == self.vq_codes)
+        if padding.any():
+            stoks = stoks[: padding[0, 0]]
+
+        stoks = F.pad(
+            stoks,
+            (0, self.stoks_len - stoks.shape[-1]),
+            value=self.vq_codes if self.config.mask_embs else 0,
+        )  # 750
+
+        x = self.rq.layers[0]._codebook.embed[
+            0, stoks.to(torch.long).view(-1)
+        ]  # (750, 64)
+        x = x.repeat_interleave(self.downsample, -2)  # (1500, 64)
+
+        project_out = (
+            getattr(self.rq, "project_out", None) or self.rq.layers[0].project_out
+        )
+        x = project_out(x).unsqueeze(0)  # (1500, 1024)
+
+        positions = torch.arange(0, x.shape[-2], dtype=torch.long, device=x.device)
+        x = x + self.positional_embedding(positions)
+
+        return self.ln_post(self.out_blocks(x))
+
+    def inference(self, samples):
+        """Perform inference on input samples"""
+
+        # Quantize and Dequantize
+        stoks = self.quantize(samples)
+        dequantize_embed = self.dequantize(stoks).to(self.whmodel[0].device)
+
+        # Decode text
+        return self.whmodel[0].decode(dequantize_embed, self.decoding_options)
 
     @torch.no_grad()
     def extract_teacher(self, samples, input_toks, output_toks):
@@ -513,68 +536,3 @@ class RQBottleneckTransformer(nn.Module):
             "entropy": entropy,
             "usage_per_code": self._codebook_usage.cpu().tolist(),
         }
-
-    # @torch.no_grad()
-    # def quantize(self, audio):
-    #     if isinstance(audio, str):
-    #         x, sr = torchaudio.load(audio)
-    #         x = torchaudio.transforms.Resample(sr, 16000)(x)[0]
-    #         audio = x.unsqueeze(0)
-
-    #     audio_max_length = 30 * 16000
-    #     if audio.shape[-1] > audio_max_length:
-    #         audio = audio[:audio_max_length]
-    #     else:
-    #         audio = F.pad(audio, (0, audio_max_length - audio.shape[-1]), value=0)
-
-    #     # Encode Mel
-    #     mel = self.log_mel_spectrogram(audio)
-    #     embs = self.whmodel[0].encoder(mel)
-
-    #     # Quantize
-    #     x = self.downsample_embeddings(embs)
-    #     x = x + self.mlp(self.mlp_ln(x))
-    #     _, stoks, _ = self.rq(x)  # quantizer.shape = (1, 750, 1024)
-    #     stoks = stoks.squeeze()
-
-    #     return stoks
-
-    # def dequantize(self, stoks):
-    #     # Dequantize
-    #     assert self.q_depth == 1
-    #     assert len(stoks.shape) == 1, "batch processing is not supported"
-
-    #     padding = torch.nonzero(stoks == self.vq_codes)
-    #     if padding.any():
-    #         stoks = stoks[: padding[0, 0]]
-
-    #     stoks = F.pad(
-    #         stoks,
-    #         (0, self.stoks_len - stoks.shape[-1]),
-    #         value=self.vq_codes if self.config.mask_embs else 0,
-    #     )  # 750
-
-    #     x = self.rq.layers[0]._codebook.embed[
-    #         0, stoks.to(torch.long).view(-1)
-    #     ]  # (750, 64)
-    #     x = x.repeat_interleave(self.downsample, -2)  # (1500, 64)
-
-    #     project_out = (
-    #         getattr(self.rq, "project_out", None) or self.rq.layers[0].project_out
-    #     )
-    #     x = project_out(x).unsqueeze(0)  # (1500, 1024)
-
-    #     positions = torch.arange(0, x.shape[-2], dtype=torch.long, device=x.device)
-    #     x = x + self.positional_embedding(positions)
-
-    #     return self.ln_post(self.out_blocks(x))
-
-    # def inference(self, samples):
-    #     """Perform inference on input samples"""
-
-    #     # Quantize and Dequantize
-    #     stoks = self.quantize(samples)
-    #     dequantize_embed = self.dequantize(stoks).to(self.whmodel[0].device)
-
-    #     # Decode text
-    #     return self.whmodel[0].decode(dequantize_embed, self.decoding_options)
