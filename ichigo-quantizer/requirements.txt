@@ -13,3 +13,4 @@ black
 evaluate
 transformers
 jiwer
+gradio
