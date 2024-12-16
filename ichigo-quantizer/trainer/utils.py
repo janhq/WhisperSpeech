@@ -45,7 +45,7 @@ def clean_whisper_text(text: str) -> str:
     text = re.sub(r'["\-]\s*["\-]\s*["\-]\s*', "", text)
 
     # Remove standalone quotes and other punctuation artifacts
-    text = re.sub(r'\s*["\'"]\s*', " ", text)
+    text = re.sub(r'(?<!\w)[\'"]\s*|\s*[\'"](?!\w)', " ", text)
     text = re.sub(r"[,\.]\s*[,\.]\s*", ".", text)
 
     # Remove non-printable characters and Unicode artifacts
