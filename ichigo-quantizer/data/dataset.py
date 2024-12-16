@@ -54,6 +54,45 @@ class WhisperDataset(Dataset):
             )
             if rank_zero_only.rank == 0:
                 print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
+
+        # TODO: load vivoice from jan-hq directly
+        elif "viVoice" in dataset_dir:
+            full_dataset = load_dataset(dataset_dir)
+            full_data = full_dataset["train"]
+            shuffled_data = full_data.shuffle(seed=42)
+
+            total_size = len(shuffled_data)
+            test_size = 10000
+            val_size = 10000
+            train_size = total_size - val_size - test_size
+
+            # === Dataset Statistics ===
+            # Dataset 0:
+            # - Size: 867,772 samples
+            # - Weight: 0.1
+            # - Effective sampling ratio: 46.2%
+            # Dataset 1:
+            # - Size: 112,326 samples
+            # - Weight: 0.9
+            # - Effective sampling ratio: 53.8%
+            # Total samples available: 980,098
+
+            if split == "train":
+                self.dataset = shuffled_data.select(range(train_size))
+            elif split == "validation":
+                self.dataset = shuffled_data.select(
+                    range(train_size, train_size + val_size)
+                )
+            elif split == "test":
+                self.dataset = shuffled_data.select(
+                    range(train_size + val_size, total_size)
+                )
+            self.dataset = self.dataset.select_columns(["audio", "text"])
+            self.dataset = self.dataset.rename_column("text", "transcription")
+            if rank_zero_only.rank == 0:
+                print(
+                    f"🚀 Split {dataset_dir} into {len(self.dataset)} samples for {split}"
+                )
         else:
             self.dataset = load_dataset(dataset_dir, split=split)
             if rank_zero_only.rank == 0:

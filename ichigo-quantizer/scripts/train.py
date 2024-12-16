@@ -148,16 +148,16 @@ def main():
 
     dataset_configs = [
         {
-            "dataset_dir": "linhtran92/viet_bud500",
+            "dataset_dir": "capleaf/viVoice",
             "language": "vi",
-            "weight": 0.5,
-            "concat_samples": True,
+            "weight": 0.1,
+            "concat_samples": False,
             "max_tokens": args.max_tokens,
         },
         {
             "dataset_dir": "parler-tts/libritts_r_filtered",
             "language": "en",
-            "weight": 0.5,
+            "weight": 0.9,
             "concat_samples": False,
             "max_tokens": args.max_tokens,
         },

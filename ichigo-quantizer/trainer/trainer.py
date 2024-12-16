@@ -354,7 +354,6 @@ class WhisperVQTrainer:
         with torch.no_grad():
             for batch_idx, (samples, output_toks) in enumerate(test_loader):
                 samples = samples.cuda()
-                # TODO: recheck inference code
                 decoded_results = model.inference(samples)
 
                 for i in range(len(samples)):
@@ -415,6 +414,7 @@ class WhisperVQTrainer:
                         result_dict["phowhisper_wer"],
                         result_dict["whisper_wer"],
                     )
+
                     progress_bar.update(1)
 
         progress_bar.close()
@@ -427,16 +427,16 @@ class WhisperVQTrainer:
         wer_data = [
             [label, val]
             for (label, val) in [
-                ("Model WER", avg_model_wer),
-                ("PhoWhisper WER", avg_phowhisper_wer),
-                ("Whisper WER", avg_whisper_wer),
+                ("Ichigo Quantizer", avg_model_wer),
+                ("PhoWhisper Large", avg_phowhisper_wer),
+                ("Whisper Medium", avg_whisper_wer),
             ]
         ]
         wer_chart = wandb.plot.bar(
             wandb.Table(data=wer_data, columns=["Model", "WER"]),
             "Model",
             "WER",
-            title="Quantizer vs PhoWhisper Large vs Whisper WER",
+            title="Word Error Rate Comparison",
         )
 
         metrics = {
