@@ -57,7 +57,7 @@ class TrainerConfig:
     batch_size: int = 16
     accumulate_grad_batches: int = 1
     validate_every_n_steps: int = 500
-    early_stopping_patience: int = 10
+    early_stopping_patience: int = 100  # TODO: fix threshold later
 
     # Hardware/Performance settings
     num_workers: int = 8
