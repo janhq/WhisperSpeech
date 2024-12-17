@@ -13,12 +13,13 @@ import torch
 import torchaudio
 import whisper
 from huggingface_hub import hf_hub_download
+from transformers import pipeline
 
 from config.vq_config import VQConfig
 from models.factory import make_vq_model
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-Ichigo_name = "jan-hq/ichigo-quantizer:loss=0.19.ckpt"
+Ichigo_name = "jan-hq/ichigo-quantizer:epoch_accuracy=0.95.ckpt"
 model_size = "medium-vi-2d-2048c-dim64"
 whisper_model_name = "medium"
 language = "vi"
@@ -76,11 +77,11 @@ ichigo_model = load_model(ref=Ichigo_name, size=model_size)
 ichigo_model.ensure_whisper(device, language)
 ichigo_model.to(device)
 
-# phowhisper = pipeline(
-#     "automatic-speech-recognition",
-#     model="vinai/PhoWhisper-large",
-#     device=device,
-#     )
+phowhisper = pipeline(
+    "automatic-speech-recognition",
+    model="vinai/PhoWhisper-large",
+    device=device,
+)
 
 
 def transcribe_ichigo(inputs):
@@ -113,12 +114,12 @@ def transcribe_whisper(inputs):
     return transcribe["text"]
 
 
-# def transcribe_phowhisper(inputs):
-#     wav2, sr = torchaudio.load(inputs)
-#     if sr != 16000:
-#         wav2 = torchaudio.functional.resample(wav2, sr, 16000)
-#     audio_sample = wav2.squeeze().float().numpy()
-#     return phowhisper(audio_sample)["text"]
+def transcribe_phowhisper(inputs):
+    wav2, sr = torchaudio.load(inputs)
+    if sr != 16000:
+        wav2 = torchaudio.functional.resample(wav2, sr, 16000)
+    audio_sample = wav2.squeeze().float().numpy()
+    return phowhisper(audio_sample)["text"]
 
 
 with gr.Blocks(title="Ichigo Whisper Quantizer") as interface:
@@ -161,19 +162,17 @@ with gr.Blocks(title="Ichigo Whisper Quantizer") as interface:
             )
 
         # PhoWhisper Model Column
-        # with gr.Column():
-        #     gr.Markdown("### PhoWhisper Model")
-        #     phowhisper_output = gr.TextArea(
-        #         label="PhoWhisper Transcription",
-        #         placeholder="Transcription will appear here...",
-        #         lines=8
-        #     )
-        #     phowhisper_btn = gr.Button("Transcribe with PhoWhisper")
-        #     phowhisper_btn.click(
-        #         fn=transcribe_phowhisper,
-        #         inputs=audio_input,
-        #         outputs=phowhisper_output
-        #     )
+        with gr.Column():
+            gr.Markdown("### PhoWhisper Model")
+            phowhisper_output = gr.TextArea(
+                label="PhoWhisper Transcription",
+                placeholder="Transcription will appear here...",
+                lines=8,
+            )
+            phowhisper_btn = gr.Button("Transcribe with PhoWhisper")
+            phowhisper_btn.click(
+                fn=transcribe_phowhisper, inputs=audio_input, outputs=phowhisper_output
+            )
 
     # Add some styling
     custom_css = """
@@ -191,6 +190,7 @@ with gr.Blocks(title="Ichigo Whisper Quantizer") as interface:
         }
     """
     gr.HTML(f"<style>{custom_css}</style>")
+
 if __name__ == "__main__":
     interface.queue()
     interface.launch("0.0.0.0", 7860, share=True)
