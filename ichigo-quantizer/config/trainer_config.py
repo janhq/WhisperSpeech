@@ -51,6 +51,9 @@ class TrainerConfig:
     task: str
     run_name: Optional[str] = None
 
+    # Training phase
+    phase: int = 1
+
     # Training loop parameters
     epochs: int = 100
     iterations: Optional[int] = None
@@ -116,6 +119,7 @@ class TrainerConfig:
         """
         return {
             # Training parameters
+            "phase": self.phase,
             "iterations": self.iterations,
             "batch_size": self.batch_size,
             "accumulate_grad_batches": self.accumulate_grad_batches,

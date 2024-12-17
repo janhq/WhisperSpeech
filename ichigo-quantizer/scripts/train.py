@@ -23,6 +23,13 @@ def parse_args():
     parser.add_argument("--task", type=str, required=True)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument(
+        "--phase",
+        type=int,
+        choices=[1, 2],
+        default=1,
+        help="Training phase (1 or 2). Phase 1 uses KL loss, Phase 2 disables it",
+    )
+    parser.add_argument(
         "--epochs", type=int, default=100, help="Number of training epochs"
     )
     parser.add_argument(
@@ -134,6 +141,7 @@ def main():
         num_gpus=args.num_gpus,
         resume_from=args.resume_from,
         checkpoint_dir=f"checkpoints/{task_name}",
+        phase=args.phase,
     )
 
     # Create model

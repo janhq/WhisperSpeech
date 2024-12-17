@@ -283,11 +283,15 @@ class RQBottleneckTransformer(nn.Module):
         self.ce_loss = self.ce_lossf(
             logits.view(-1, logits.shape[-1]), output_toks.view(-1)
         )
-        self.kl_loss = self.kl_lossf(
-            F.log_softmax(logits, dim=-1), F.softmax(teacher_logits, dim=-1)
-        )
-        # TODO: args turn off KL Loss phase 1 and 2
-        # self.kl_loss = 0
+
+        # Only compute KL loss in Phase 1
+        if hasattr(self, "phase") and self.phase == 1:
+            self.kl_loss = self.kl_lossf(
+                F.log_softmax(logits, dim=-1), F.softmax(teacher_logits, dim=-1)
+            )
+        else:
+            self.kl_loss = 0
+
         loss = self.ce_loss + self.kl_loss_mul * self.kl_loss
 
         if not self.no_quantize:

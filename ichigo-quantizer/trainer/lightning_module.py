@@ -7,11 +7,14 @@ from models.vq_transformer import RQBottleneckTransformer
 
 
 class WhisperVQModule(pl.LightningModule):
-    def __init__(self, model: RQBottleneckTransformer, config, train_dataset_size=None):
+    def __init__(
+        self, model: RQBottleneckTransformer, config, train_dataset_size=None, phase=1
+    ):
         super().__init__()
         self.model = model
         self.config = config
         self.train_dataset_size = train_dataset_size
+        self.model.phase = phase
         self.save_hyperparameters(config.to_hparams())
 
     def on_fit_start(self):

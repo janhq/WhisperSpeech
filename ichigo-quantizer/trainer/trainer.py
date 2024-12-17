@@ -289,20 +289,29 @@ class WhisperVQTrainer:
         train_dataset_size = len(train_dataset)
 
         lightning_module = WhisperVQModule(
-            model, self.config, train_dataset_size=train_dataset_size
+            model,
+            self.config,
+            train_dataset_size=train_dataset_size,
+            phase=self.config.phase,
         )
 
-        # TODO: resume training w/o state dict, rmv part ckpt_path in fit
-        # if self.config.resume_from:
-        #     lightning_module.load_state_dict(
-        #         torch.load(self.config.resume_from)["state_dict"], strict=False
-        #     )
+        # Phase 2: Load state dict directly if resuming
+        if self.config.phase == 2 and self.config.resume_from:
+            lightning_module.load_state_dict(
+                torch.load(self.config.resume_from)["state_dict"], strict=False
+            )
 
         self.trainer.fit(
             model=lightning_module,
             train_dataloaders=train_loader,
             val_dataloaders=val_loaders,
-            ckpt_path=self.config.resume_from,
+            ckpt_path=(
+                self.config.resume_from
+                if self.config.phase == 1
+                and self.config.resume_from
+                is not None  # TODO: extend this later to resume training from a checkpoint
+                else None
+            ),
         )
 
         if rank_zero_only.rank == 0:
