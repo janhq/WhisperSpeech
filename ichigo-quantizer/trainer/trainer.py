@@ -1,19 +1,26 @@
 import os
-import datetime
 from pathlib import Path
-import torch
-import pandas as pd
+
 import lightning.pytorch as pl
-from lightning.pytorch.loggers import WandbLogger
-from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
+import pandas as pd
+import torch
+import whisper
+from evaluate import load
 from lightning.fabric.utilities.rank_zero import rank_zero_only
+from lightning.pytorch.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
+from lightning.pytorch.loggers import WandbLogger
+from torch.utils.data import ConcatDataset, DataLoader, WeightedRandomSampler
+from tqdm import tqdm
+from transformers import pipeline
+
+import wandb
 from config.trainer_config import TrainerConfig
 from trainer.lightning_module import WhisperVQModule
 from trainer.utils import clean_whisper_text
-from torch.utils.data import DataLoader, WeightedRandomSampler, ConcatDataset
-import whisper
-from tqdm import tqdm
-import wandb
 
 
 class WhisperVQTrainer:
@@ -115,19 +122,37 @@ class WhisperVQTrainer:
         Initialize PyTorch Lightning callbacks.
 
         Sets up:
-        1. ModelCheckpoint: For saving model checkpoints based on validation metrics
-        2. LearningRateMonitor: For tracking learning rate changes
+        1. ModelCheckpoint for best validation loss
+        2. ModelCheckpoint for periodic epoch saves
+        3. LearningRateMonitor
+        4. EarlyStopping
         """
         self.callbacks = [
+            # Best checkpoint based on validation loss
             ModelCheckpoint(
                 dirpath=self.config.checkpoint_dir,
-                filename=f"{self.config.task}/{self.run_name}/{{epoch}}-{{step}}-{{val/loss:.2f}}",
-                monitor=self.config.monitored_metric,
+                filename=f"{self.config.task}/{self.run_name}/best-{{epoch}}-{{step}}-{{val/epoch_accuracy:.2f}}",
+                monitor="val/epoch_accuracy",
                 save_top_k=1,
-                mode="min",
+                mode="max",
                 save_on_train_epoch_end=False,
+                verbose=True if rank_zero_only.rank == 0 else False,
+            ),
+            # Periodic checkpoint every epoch
+            ModelCheckpoint(
+                dirpath=self.config.checkpoint_dir,
+                filename=f"{self.config.task}/{self.run_name}/epoch-{{epoch}}-{{step}}-{{val/epoch_accuracy:.2f}}",
+                save_top_k=-1,
+                every_n_epochs=1,
+                save_on_train_epoch_end=True,
             ),
             LearningRateMonitor(logging_interval="step"),
+            EarlyStopping(
+                monitor="val/epoch_accuracy",
+                patience=self.config.early_stopping_patience,
+                mode="max",
+                verbose=True if rank_zero_only.rank == 0 else False,
+            ),
         ]
 
     def _setup_trainer(self):
@@ -177,7 +202,37 @@ class WhisperVQTrainer:
         2. Wraps the model in a Lightning module
         3. Executes the training
         4. Saves the final model (on rank 0 only)
+
+        #!  What happens during training example:
+        1. Total samples = 700K (all samples are included)
+        2. For each training step:
+        - Vietnamese samples have 0.7 probability of being selected
+        - English samples have 0.3 probability of being selected
+
+        # Approximate sampling distribution:
+        - Vietnamese: (500K * 0.7) / (500K * 0.7 + 200K * 0.3) ≈ 85% chance
+        - English: (200K * 0.3) / (500K * 0.7 + 200K * 0.3) ≈ 15% chance
         """
+        # Add statistics printing at the start
+        if isinstance(train_dataset, ConcatDataset):
+            total_samples = sum(
+                len(dataset.dataset) for dataset in train_dataset.datasets
+            )
+            if rank_zero_only.rank == 0:
+                print("\n=== Dataset Statistics ===")
+                for i, dataset in enumerate(train_dataset.datasets):
+                    weight = dataset.weight
+                    size = len(dataset.dataset)
+                    effective_ratio = (size * weight) / sum(
+                        len(d.dataset) * d.weight for d in train_dataset.datasets
+                    )
+                    print(f"Dataset {i}:")
+                    print(f"  - Size: {size:,} samples")
+                    print(f"  - Weight: {weight}")
+                    print(f"  - Effective sampling ratio: {effective_ratio:.1%}")
+                print(f"Total samples available: {total_samples:,}")
+                print("=====================\n")
+
         # Train DataLoader
         if isinstance(train_dataset, ConcatDataset):
             weights = []
@@ -200,6 +255,7 @@ class WhisperVQTrainer:
                 num_workers=self.config.num_workers,
                 pin_memory=True,
             )
+
         else:
             train_loader = DataLoader(
                 train_dataset,
@@ -232,31 +288,48 @@ class WhisperVQTrainer:
 
         train_dataset_size = len(train_dataset)
 
-        if rank_zero_only.rank == 0:
-            print(f"🥹 Training dataset size: {train_dataset_size}")
-
         lightning_module = WhisperVQModule(
-            model, self.config, train_dataset_size=train_dataset_size
+            model,
+            self.config,
+            train_dataset_size=train_dataset_size,
+            phase=self.config.phase,
         )
+
+        # Phase 2: Load state dict directly if resuming
+        if self.config.phase == 2 and self.config.resume_from:
+            lightning_module.load_state_dict(
+                torch.load(self.config.resume_from)["state_dict"], strict=False
+            )
 
         self.trainer.fit(
             model=lightning_module,
             train_dataloaders=train_loader,
             val_dataloaders=val_loaders,
-            ckpt_path=self.config.resume_from,
+            ckpt_path=(
+                self.config.resume_from
+                if self.config.phase == 1
+                and self.config.resume_from
+                is not None  # TODO: extend this later to resume training from a checkpoint
+                else None
+            ),
         )
 
         if rank_zero_only.rank == 0:
             self._save_model(model)
 
     def get_predictions(self, model, test_dataset, whisper_name, language):
+        # ! Whisper Medium
         whisper_model = whisper.load_model(whisper_name)
         whisper_model.to("cuda")
 
-        # W&B Table to store the results
-        columns = ["audio_id", "ground_truth", "predicted_output", "whisper_output"]
-        predictions_table = wandb.Table(columns=columns)
+        # ! PhoWhisper
+        phowhisper = pipeline(
+            "automatic-speech-recognition",
+            model="vinai/PhoWhisper-large",
+            device="cuda",
+        )
 
+        # ! Quantizer
         test_loader = DataLoader(
             test_dataset,
             batch_size=self.config.batch_size,
@@ -264,44 +337,43 @@ class WhisperVQTrainer:
             num_workers=self.config.num_workers,
             pin_memory=True,
         )
-        results = []
         model.eval()
         model = model.cuda()
 
-        audio_id_counter = 0
+        # ! Tracking
+        columns = [
+            "audio_id",
+            "ground_truth",
+            "predicted_output",
+            "phowhisper_output",
+            "whisper_output",
+            "model_wer",
+            "phowhisper_wer",
+            "whisper_wer",
+        ]
+        predictions_table = wandb.Table(columns=columns)
 
-        total_samples = len(test_dataset)
+        results = []
+        wer_metric = load("wer")
 
         progress_bar = tqdm(
-            total=total_samples, desc="Generating predictions", unit="samples"
+            total=len(test_dataset), desc="Generating predictions", unit="samples"
         )
 
         with torch.no_grad():
-            for batch_idx, (samples, mask, input_toks, output_toks) in enumerate(
-                test_loader
-            ):
+            for batch_idx, (samples, output_toks) in enumerate(test_loader):
                 samples = samples.cuda()
-                mask = mask.cuda()
-                input_toks = input_toks.cuda()
-                output_toks = output_toks.cuda()
+                decoded_results = model.inference(samples)
 
-                # Get predictions from your model
-                _, logits, _ = model(samples, mask, input_toks, output_toks)
-
-                # Process each sample in the batch
                 for i in range(len(samples)):
-                    # Your model predictions
-                    pred_tokens = logits[i].argmax(dim=-1)
-                    pred_text = model.tokenizer.decode(pred_tokens.tolist())
-                    pred_text = clean_whisper_text(pred_text)
-
-                    # Ground truth
-                    ground_truth = model.tokenizer.decode(
-                        output_toks[i][output_toks[i] != -100].tolist()
-                    )
+                    gt_tokens = output_toks[i][output_toks[i] != -100]
+                    ground_truth = model.tokenizer.decode(gt_tokens.tolist())
                     ground_truth = clean_whisper_text(ground_truth)
 
-                    # Get Whisper model prediction
+                    # ! Process model predictions
+                    pred_text = clean_whisper_text(decoded_results[i].text)
+
+                    #! Process Whisper predictions
                     audio_sample = samples[i].cpu().numpy()
                     whisper_result = whisper_model.transcribe(
                         audio_sample,
@@ -311,27 +383,79 @@ class WhisperVQTrainer:
                     )
                     whisper_text = clean_whisper_text(whisper_result["text"])
 
+                    #! Process PhoWhisper
+                    phowhisper_text = clean_whisper_text(
+                        phowhisper(audio_sample)["text"]
+                    )
+
+                    # ! Calculate WER
+                    model_wer = wer_metric.compute(
+                        references=[ground_truth], predictions=[pred_text]
+                    )
+                    phowhisper_wer = wer_metric.compute(
+                        references=[ground_truth], predictions=[phowhisper_text]
+                    )
+                    whisper_wer = wer_metric.compute(
+                        references=[ground_truth], predictions=[whisper_text]
+                    )
+
                     result_dict = {
-                        "audio_id": f"audio_{audio_id_counter}",
+                        "audio_id": f"audio_{batch_idx * self.config.batch_size + i}",
                         "ground_truth": ground_truth,
                         "predicted_output": pred_text,
+                        "phowhisper_output": phowhisper_text,
                         "whisper_output": whisper_text,
+                        "model_wer": model_wer,
+                        "phowhisper_wer": phowhisper_wer,
+                        "whisper_wer": whisper_wer,
                     }
+
+                    results.append(result_dict)
+                    print(result_dict, "\n")
 
                     predictions_table.add_data(
                         result_dict["audio_id"],
                         result_dict["ground_truth"],
                         result_dict["predicted_output"],
+                        result_dict["phowhisper_output"],
                         result_dict["whisper_output"],
+                        result_dict["model_wer"],
+                        result_dict["phowhisper_wer"],
+                        result_dict["whisper_wer"],
                     )
 
-                    # print(result_dict)
-                    results.append(result_dict)
-                    audio_id_counter += 1
                     progress_bar.update(1)
+
         progress_bar.close()
 
-        self.wandb_logger.experiment.log({"predictions": predictions_table})
+        # WER chart
+        avg_model_wer = sum(r["model_wer"] for r in results) / len(results)
+        avg_whisper_wer = sum(r["whisper_wer"] for r in results) / len(results)
+        avg_phowhisper_wer = sum(r["phowhisper_wer"] for r in results) / len(results)
+
+        wer_data = [
+            [label, val]
+            for (label, val) in [
+                ("Ichigo Quantizer", avg_model_wer),
+                ("PhoWhisper Large", avg_phowhisper_wer),
+                ("Whisper Medium", avg_whisper_wer),
+            ]
+        ]
+        wer_chart = wandb.plot.bar(
+            wandb.Table(data=wer_data, columns=["Model", "WER"]),
+            "Model",
+            "WER",
+            title="Word Error Rate Comparison",
+        )
+
+        metrics = {
+            "predictions": predictions_table,
+            "avg_model_wer": avg_model_wer,
+            "avg_whisper_wer": avg_whisper_wer,
+            "avg_phowhisper_wer": avg_phowhisper_wer,
+            "wer_comparison": wer_chart,
+        }
+        self.wandb_logger.experiment.log(metrics)
 
         return pd.DataFrame(results)
 

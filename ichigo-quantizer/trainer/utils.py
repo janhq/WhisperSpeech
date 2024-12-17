@@ -1,5 +1,5 @@
-from torch.utils.data import DataLoader
 import regex as re
+from torch.utils.data import DataLoader
 
 
 def setup_dataloaders(train_dataset, val_dataset, config):
@@ -36,6 +36,7 @@ def clean_whisper_text(text: str) -> str:
         "<|notimestamps|>",
         "<|nospeech|>",
         "<|endoftext|>",
+        "<|startoftranscript|>",
     ]
     for token in special_tokens:
         text = text.replace(token, "")
@@ -44,7 +45,7 @@ def clean_whisper_text(text: str) -> str:
     text = re.sub(r'["\-]\s*["\-]\s*["\-]\s*', "", text)
 
     # Remove standalone quotes and other punctuation artifacts
-    text = re.sub(r'\s*["\'"]\s*', " ", text)
+    text = re.sub(r'(?<!\w)[\'"]\s*|\s*[\'"](?!\w)', " ", text)
     text = re.sub(r"[,\.]\s*[,\.]\s*", ".", text)
 
     # Remove non-printable characters and Unicode artifacts

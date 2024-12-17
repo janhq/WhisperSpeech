@@ -1,16 +1,20 @@
 import sys
+import warnings
 from pathlib import Path
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
 
 import argparse
+
 from config.trainer_config import TrainerConfig
 from config.vq_config import VQConfig
-from models.factory import make_vq_model
-from trainer.trainer import WhisperVQTrainer
 from data.dataset import load_test_dataset
+from models.factory import make_vq_model
 from trainer.lightning_module import WhisperVQModule
+from trainer.trainer import WhisperVQTrainer
 
 
 def parse_args():
@@ -28,6 +32,9 @@ def parse_args():
     )
     parser.add_argument(
         "--batch-size", type=int, default=100, help="Batch size for evaluation"
+    )
+    parser.add_argument(
+        "--num-samples", type=int, default=None, help="Number of samples"
     )
     return parser.parse_args()
 
@@ -47,11 +54,12 @@ def main():
     lightning_module.load_from_checkpoint(args.model_path)
     model = lightning_module.model
 
-    model.setup(device="cuda")
+    model.setup(device="cuda", language=args.language)
 
     test_dataset = load_test_dataset(
         dataset_dir=args.test_data,
         language=args.language,
+        num_samples=args.num_samples,
     )
 
     # Create trainer and get predictions

@@ -1,11 +1,13 @@
-from typing import Tuple, Optional, List
-from torch.utils.data import Dataset, ConcatDataset
-from datasets import load_dataset
+from typing import List, Optional
+
 import torch
 import torch.nn.functional as F
 import torchaudio
 import whisper
+from datasets import load_dataset
 from lightning.fabric.utilities.rank_zero import rank_zero_only
+from torch.utils.data import ConcatDataset, Dataset
+from tqdm import tqdm
 
 
 class WeightedDataset(Dataset):
@@ -34,9 +36,13 @@ class WhisperDataset(Dataset):
         concat_samples: bool = True,
         max_tokens: int = 200,
     ):
+        self.split = split
+
         if "libritts_r_filtered" in dataset_dir:
             if split == "validation":
                 self.dataset = load_dataset(dataset_dir, "clean", split="dev.clean")
+            elif split == "test":
+                self.dataset = load_dataset(dataset_dir, "clean", split="test.clean")
             else:
                 self.dataset = load_dataset(
                     dataset_dir, "clean", split="train.clean.360"
@@ -48,6 +54,45 @@ class WhisperDataset(Dataset):
             )
             if rank_zero_only.rank == 0:
                 print(f"🚀 Loaded {len(self.dataset)} samples from {dataset_dir}")
+
+        # TODO: load vivoice from jan-hq directly
+        elif "viVoice" in dataset_dir:
+            full_dataset = load_dataset(dataset_dir)
+            full_data = full_dataset["train"]
+            shuffled_data = full_data.shuffle(seed=42)
+
+            total_size = len(shuffled_data)
+            test_size = 10000
+            val_size = 10000
+            train_size = total_size - val_size - test_size
+
+            # === Dataset Statistics ===
+            # Dataset 0:
+            # - Size: 867,772 samples
+            # - Weight: 0.1
+            # - Effective sampling ratio: 46.2%
+            # Dataset 1:
+            # - Size: 112,326 samples
+            # - Weight: 0.9
+            # - Effective sampling ratio: 53.8%
+            # Total samples available: 980,098
+
+            if split == "train":
+                self.dataset = shuffled_data.select(range(train_size))
+            elif split == "validation":
+                self.dataset = shuffled_data.select(
+                    range(train_size, train_size + val_size)
+                )
+            elif split == "test":
+                self.dataset = shuffled_data.select(
+                    range(train_size + val_size, total_size)
+                )
+            self.dataset = self.dataset.select_columns(["audio", "text"])
+            self.dataset = self.dataset.rename_column("text", "transcription")
+            if rank_zero_only.rank == 0:
+                print(
+                    f"🚀 Split {dataset_dir} into {len(self.dataset)} samples for {split}"
+                )
         else:
             self.dataset = load_dataset(dataset_dir, split=split)
             if rank_zero_only.rank == 0:
@@ -72,7 +117,9 @@ class WhisperDataset(Dataset):
         self.concat_samples = concat_samples
 
         if self.concat_samples:
-            print("🔗 Concatenating samples to maximize usage of 30-second window")
+            print(
+                f"🔗 Concatenating {dataset_dir} samples to maximize usage of 30-second window"
+            )
             self.grouped_indices = self._group_samples()
 
             # # Process all samples once to gather statistics
@@ -93,7 +140,11 @@ class WhisperDataset(Dataset):
         current_group = []
         current_duration = 0.0
 
-        for idx in range(len(self.dataset)):
+        for idx in tqdm(
+            range(len(self.dataset)),
+            desc="Grouping samples",
+            disable=rank_zero_only.rank != 0,
+        ):
             duration = self._get_audio_duration(self.dataset[idx])
 
             if current_duration + duration <= 30.0:
@@ -101,9 +152,6 @@ class WhisperDataset(Dataset):
                 current_duration += duration
             else:
                 if current_group:
-                    # print(
-                    #     f"✓ Group {len(groups)}: {len(current_group)} samples, duration: {current_duration:.2f}s"
-                    # )
                     groups.append(current_group)
                 current_group = [idx]
                 current_duration = duration
@@ -124,6 +172,42 @@ class WhisperDataset(Dataset):
         return F.pad(audio, (0, self.max_audio_length - len(audio)), value=0)
 
     def __getitem__(self, idx):
+        if self.split == "test":
+            example = self.dataset[idx]
+
+            samples = torch.tensor(example["audio"]["array"], dtype=torch.float32)
+
+            if example["audio"]["sampling_rate"] != 16000:
+                resampler = torchaudio.transforms.Resample(
+                    example["audio"]["sampling_rate"], 16000
+                )
+                samples = resampler(samples)
+
+            # Normalize audio
+            if samples.abs().max() > 0:
+                samples = samples / samples.abs().max()
+
+            # Pad audio
+            samples = self.pad_audio(samples)
+
+            if samples.abs().max() > 0:
+                samples = samples / samples.abs().max()
+
+            # Process text tokens
+            tokens = list(
+                self.tokenizer.sot_sequence_including_notimestamps
+            ) + self.tokenizer.encode(example[self.txt_label])
+
+            # Pad tokens
+            rpad = self.max_tokens - len(tokens)
+            output_toks = F.pad(
+                torch.tensor(tokens, dtype=torch.long),
+                (0, rpad),
+                value=self.tokenizer.eot,
+            )
+
+            return samples, output_toks
+
         if not self.concat_samples:
             # Get single sample
             example = self.dataset[idx]

@@ -1,6 +1,7 @@
 import dataclasses
-from typing import List, Optional
 from pathlib import Path
+from typing import List, Optional
+
 from .vq_config import VQConfig
 
 
@@ -50,12 +51,16 @@ class TrainerConfig:
     task: str
     run_name: Optional[str] = None
 
+    # Training phase
+    phase: int = 1
+
     # Training loop parameters
     epochs: int = 100
     iterations: Optional[int] = None
     batch_size: int = 16
     accumulate_grad_batches: int = 1
     validate_every_n_steps: int = 500
+    early_stopping_patience: int = 100  # TODO: fix threshold later
 
     # Hardware/Performance settings
     num_workers: int = 8
@@ -72,7 +77,6 @@ class TrainerConfig:
     # Model and optimization parameters
     vq_config: VQConfig = None
     lr_schedule: str = "linear"
-    monitored_metric: str = "val/loss"
 
     # Checkpoint handling
     resume_from: Optional[Path] = None
@@ -115,10 +119,12 @@ class TrainerConfig:
         """
         return {
             # Training parameters
+            "phase": self.phase,
             "iterations": self.iterations,
             "batch_size": self.batch_size,
             "accumulate_grad_batches": self.accumulate_grad_batches,
             "validate_every_n_steps": self.validate_every_n_steps,
+            "early_stopping_patience": self.early_stopping_patience,
             # Hardware settings
             "strategy": self.strategy,
             "precision": self.precision,

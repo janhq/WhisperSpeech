@@ -1,6 +1,8 @@
-from torch import Tensor, nn
-from models.modules import MultiHeadAttention, LayerNorm
 from typing import Optional
+
+from torch import Tensor, nn
+
+from models.modules import LayerNorm, MultiHeadAttention
 
 
 class ResidualAttentionBlock(nn.Module):

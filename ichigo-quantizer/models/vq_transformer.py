@@ -1,13 +1,16 @@
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchaudio
 import whisper
-from vector_quantize_pytorch import ResidualVQ
 from huggingface_hub import hf_hub_download
-from models.modules import LayerNorm
-from models.layers import ResidualAttentionBlock
+from vector_quantize_pytorch import ResidualVQ
+
 from data.utils import get_tokenizer
+from models.layers import ResidualAttentionBlock
+from models.modules import LayerNorm
 
 
 class RQBottleneckTransformer(nn.Module):
@@ -179,39 +182,30 @@ class RQBottleneckTransformer(nn.Module):
         torch.nn.init.constant_(m.bias, 0)
         torch.nn.init.constant_(m.weight, 1)
 
-    def forward(self, samples, mask, input_toks, output_toks):
+    def forward(self, samples, mask=None, input_toks=None, output_toks=None):
         """
         Forward pass of the model.
-
         Args:
             samples (torch.Tensor): Input audio samples [B, 1, T]
-            mask (torch.Tensor): Attention mask [B, 1, T]
-            input_toks (torch.Tensor): Input tokens [B, 1, S]
-            output_toks (torch.Tensor): Target output tokens [B, 1, S]
-
+            mask (torch.Tensor, optional): Attention mask [B, 1, T] (only for training)
+            input_toks (torch.Tensor, optional): Input tokens [B, 1, S] (only for training)
+            output_toks (torch.Tensor, optional): Target output tokens [B, 1, S] (only for training)
         Returns:
-            tuple: (None, logits, loss) where logits are the model predictions
-                  and loss is the combined training loss
+            During training: tuple (list_loss, logits, loss)
+            During inference: Whisper decoded result
         """
-        # Extract teacher embeddings and logits
+        # Training mode: Extract teacher embeddings and logit
         embs, teacher_logits = self.extract_teacher(samples, input_toks, output_toks)
 
         if not self.no_quantize:
             # Process through quantization pipeline
             x = self._process_quantization(embs, mask)
-
-            # Ensure input_toks is 2D by squeezing extra dimension
-            input_toks_2d = input_toks.squeeze(1)
-
-            # Get final logits and compute loss
-            logits = self.whmodel[0].decoder(input_toks_2d, x)
+            logits = self.whmodel[0].decoder(input_toks.squeeze(1), x)
             loss, list_loss = self._compute_loss(
                 logits, output_toks.squeeze(1), teacher_logits
             )
         else:
-            # No quantization mode
-            input_toks_2d = input_toks.squeeze(1)
-            logits = self.whmodel[0].decoder(input_toks_2d, embs)
+            logits = self.whmodel[0].decoder(input_toks.squeeze(1), embs)
             loss, list_loss = self._compute_loss(
                 logits, output_toks.squeeze(1), teacher_logits
             )
@@ -223,7 +217,7 @@ class RQBottleneckTransformer(nn.Module):
 
         return list_loss, logits, loss
 
-    def _process_quantization(self, embs, mask):
+    def _process_quantization(self, embs, mask=None):
         """
         Process embeddings through the quantization pipeline.
 
@@ -240,9 +234,10 @@ class RQBottleneckTransformer(nn.Module):
         quantized, indices, self.commit_loss = self.rq(x)
         # (8, 750, 1024), (8, 750, 1), (1, 1)
         # indices of seq len, range [0, vq_codes (w/ mask code)]
+        # 1024 this is dim = self.width, not codebook_dim
         self.commit_loss = self.commit_loss.mean()
 
-        # Update codebook usage tracking (per step)
+        # ! Update codebook usage tracking (per step)
         if self.training:
             self._codebook_usage.zero_()
             for sample_indices in indices:  # sample_indices shape: [750, 1]
@@ -259,17 +254,18 @@ class RQBottleneckTransformer(nn.Module):
                 )
 
         # Post-quantization processing
-        x = quantized.repeat_interleave(self.downsample, -2)
+        x = quantized.repeat_interleave(self.downsample, -2)  # (8, 1500, 1024)
 
-        # Handle masked embeddings
-        if self.config.mask_embs:
+        # Handle masked embeddings only during training
+        if self.training and self.config.mask_embs and mask is not None:
             project_out = (
                 getattr(self.rq, "project_out", None) or self.rq.layers[0].project_out
             )
+            # self.rq.layers[0]._codebook.embed[0, self.vq_codes] dim 64
             x[~mask] = project_out(self.rq.layers[0]._codebook.embed[0, self.vq_codes])
 
         # Add positional embeddings and apply transformer
-        x = x + self.positional_embedding(self.positions.to("cuda"))
+        x = x + self.positional_embedding(self.positions.to(x.device))
         x = self.ln_post(self.out_blocks(x))
 
         return x
@@ -287,9 +283,15 @@ class RQBottleneckTransformer(nn.Module):
         self.ce_loss = self.ce_lossf(
             logits.view(-1, logits.shape[-1]), output_toks.view(-1)
         )
-        self.kl_loss = self.kl_lossf(
-            F.log_softmax(logits, dim=-1), F.softmax(teacher_logits, dim=-1)
-        )
+
+        # Only compute KL loss in Phase 1
+        if hasattr(self, "phase") and self.phase == 1:
+            self.kl_loss = self.kl_lossf(
+                F.log_softmax(logits, dim=-1), F.softmax(teacher_logits, dim=-1)
+            )
+        else:
+            self.kl_loss = 0
+
         loss = self.ce_loss + self.kl_loss_mul * self.kl_loss
 
         if not self.no_quantize:
@@ -305,6 +307,71 @@ class RQBottleneckTransformer(nn.Module):
             .sum()
         )
         self.val_total += valid_toks.float().sum()
+
+    @torch.no_grad()
+    def quantize(self, audio):
+        if isinstance(audio, str):
+            x, sr = torchaudio.load(audio)
+            x = torchaudio.transforms.Resample(sr, 16000)(x)[0]
+            audio = x.unsqueeze(0)
+
+        audio_max_length = 30 * 16000
+        if audio.shape[-1] > audio_max_length:
+            audio = audio[:audio_max_length]
+        else:
+            audio = F.pad(audio, (0, audio_max_length - audio.shape[-1]), value=0)
+
+        # Encode Mel
+        mel = self.log_mel_spectrogram(audio)
+        embs = self.whmodel[0].encoder(mel)
+
+        # Quantize
+        x = self.downsample_embeddings(embs)
+        x = x + self.mlp(self.mlp_ln(x))
+        _, stoks, _ = self.rq(x)  # quantizer.shape = (1, 750, 1024)
+        stoks = stoks.squeeze()
+
+        return stoks
+
+    def dequantize(self, stoks):
+        # Dequantize
+        assert self.q_depth == 1
+        assert len(stoks.shape) == 1, "batch processing is not supported"
+
+        padding = torch.nonzero(stoks == self.vq_codes)
+        if padding.any():
+            stoks = stoks[: padding[0, 0]]
+
+        stoks = F.pad(
+            stoks,
+            (0, self.stoks_len - stoks.shape[-1]),
+            value=self.vq_codes if self.config.mask_embs else 0,
+        )  # 750
+
+        x = self.rq.layers[0]._codebook.embed[
+            0, stoks.to(torch.long).view(-1)
+        ]  # (750, 64)
+        x = x.repeat_interleave(self.downsample, -2)  # (1500, 64)
+
+        project_out = (
+            getattr(self.rq, "project_out", None) or self.rq.layers[0].project_out
+        )
+        x = project_out(x).unsqueeze(0)  # (1500, 1024)
+
+        positions = torch.arange(0, x.shape[-2], dtype=torch.long, device=x.device)
+        x = x + self.positional_embedding(positions)
+
+        return self.ln_post(self.out_blocks(x))
+
+    def inference(self, samples):
+        """Perform inference on input samples"""
+
+        # Quantize and Dequantize
+        stoks = self.quantize(samples)
+        dequantize_embed = self.dequantize(stoks).to(self.whmodel[0].device)
+
+        # Decode text
+        return self.whmodel[0].decode(dequantize_embed, self.decoding_options)
 
     @torch.no_grad()
     def extract_teacher(self, samples, input_toks, output_toks):
@@ -367,18 +434,20 @@ class RQBottleneckTransformer(nn.Module):
         self.val_total[:] = 0
         return metrics
 
-    def setup(self, device):
+    def setup(self, device, language=None, is_train=None):
         """Setup the model on specified device"""
-        self.ensure_whisper(device)
+        self.ensure_whisper(device=device, language=language, is_train=is_train)
 
-    def ensure_whisper(self, device=None):
+    def ensure_whisper(self, device=None, language=None, is_train=None):
         """Ensure Whisper model is loaded"""
         if self.whmodel is not None:
             return
         device = device or self.device
         if self.whmodel is None:
             self.whmodel = [whisper.load_model(self.whisper_model_name, device=device)]
-        self.decoding_options = whisper.DecodingOptions()
+        if language is not None and not is_train:
+            print(f"Setting decoding options for {language}")
+            self.decoding_options = whisper.DecodingOptions(language=language)
         self.tokenizer = get_tokenizer(self.whisper_model_name, None)
 
     @property
