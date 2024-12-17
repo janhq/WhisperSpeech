@@ -3,8 +3,8 @@
 ## Installation
 1. Create virtual enviroment
    ```bash
-   python -m venv quant
-   source quant/bin/activate
+   python -m venv iq
+   source iq/bin/activate
    ```
 2. Clone the repository and install requirement packages (Python 3.11)
    ```bash
@@ -17,11 +17,6 @@
    huggingface-cli login
    wandb login
    ```
-## Dataset
-Running preprocess data and upload to HuggingFace Hub
-```bash
-bash scripts/concat_dataset.py
-```
 ## Training
 Modify config and run scripts
 ```bash
@@ -32,4 +27,9 @@ sh scripts/train_multi.sh
 After training, modify inference config and run scripts
 ```bash
 sh scripts/test.sh
+```
+
+## Demo
+```python
+python demo/app.py
 ```
