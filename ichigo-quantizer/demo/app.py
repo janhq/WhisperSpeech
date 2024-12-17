@@ -131,7 +131,7 @@ with gr.Blocks(title="Ichigo Whisper Quantizer") as interface:
     with gr.Row():
         # Audio input section
         audio_input = gr.Audio(
-            sources=["microphone"], type="filepath", label="Audio Input"
+            sources=["upload", "microphone"], type="filepath", label="Audio Input"
         )
 
     with gr.Row():
