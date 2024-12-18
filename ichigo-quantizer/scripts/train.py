@@ -59,6 +59,20 @@ def load_state_dict_flexible(model, state_dict):
     """Load state dict with flexible matching"""
     model_state = model.state_dict()
 
+    # # TODO: only for v2 -> v3 transition
+    # # Map old keys to new keys
+    # key_mapping = {
+    #     "out_blocks.": "_out_blocks.",  # Map v2 to v3 naming
+    # }
+
+    # # Update keys based on mapping
+    # for old_key in list(state_dict.keys()):
+    #     for old_pattern, new_pattern in key_mapping.items():
+    #         if old_pattern in old_key:
+    #             new_key = old_key.replace(old_pattern, new_pattern)
+    #             state_dict[new_key] = state_dict.pop(old_key)
+    #             print(f"Remapping key: {old_key} -> {new_key}")
+
     # Remove unexpected keys
     for key in list(state_dict.keys()):
         if key not in model_state:
