@@ -314,26 +314,34 @@ class RQBottleneckTransformer(nn.Module):
             x, sr = torchaudio.load(audio)
             x = torchaudio.transforms.Resample(sr, 16000)(x)[0]
             audio = x.unsqueeze(0)
-
-        audio_max_length = 30 * 16000
-        if audio.shape[-1] > audio_max_length:
-            audio = audio[:audio_max_length]
-        else:
-            audio = F.pad(audio, (0, audio_max_length - audio.shape[-1]), value=0)
-
         # Encode Mel
         mel = self.log_mel_spectrogram(audio)
-        embs = self.whmodel[0].encoder(mel)
+        n = mel.shape[-1]
 
+        if n > whisper.audio.N_FRAMES:
+            padding = 0
+            padded = mel[:, :, : whisper.audio.N_FRAMES]
+            n = whisper.audio.N_FRAMES
+        else:
+            padding = -n % whisper.audio.N_FRAMES
+            padded = F.pad(mel, (0, padding), value=-1.5)
+
+        embs = self.whmodel[0].encoder(padded)
         # Quantize
         x = self.downsample_embeddings(embs)
         x = x + self.mlp(self.mlp_ln(x))
-        _, stoks, _ = self.rq(x)  # quantizer.shape = (1, 750, 1024)
-        stoks = stoks.squeeze()
+        _, stoks, _ = self.rq(x)
+        stoks = stoks.squeeze(-1)
 
-        return stoks
+        # PAD token
+        if self.config.mask_embs:
+            return stoks[:, : n // 2 // self.downsample]
+        else:
+            return stoks
 
     def dequantize(self, stoks):
+        stoks = stoks.squeeze()
+
         # Dequantize
         assert self.q_depth == 1
         assert len(stoks.shape) == 1, "batch processing is not supported"
@@ -346,17 +354,15 @@ class RQBottleneckTransformer(nn.Module):
             stoks,
             (0, self.stoks_len - stoks.shape[-1]),
             value=self.vq_codes if self.config.mask_embs else 0,
-        )  # 750
+        )
 
-        x = self.rq.layers[0]._codebook.embed[
-            0, stoks.to(torch.long).view(-1)
-        ]  # (750, 64)
-        x = x.repeat_interleave(self.downsample, -2)  # (1500, 64)
+        x = self.rq.layers[0]._codebook.embed[0, stoks.to(torch.long).view(-1)]
+        x = x.repeat_interleave(self.downsample, -2)
 
         project_out = (
             getattr(self.rq, "project_out", None) or self.rq.layers[0].project_out
         )
-        x = project_out(x).unsqueeze(0)  # (1500, 1024)
+        x = project_out(x).unsqueeze(0)
 
         positions = torch.arange(0, x.shape[-2], dtype=torch.long, device=x.device)
         x = x + self.positional_embedding(positions)
@@ -369,7 +375,6 @@ class RQBottleneckTransformer(nn.Module):
         # Quantize and Dequantize
         stoks = self.quantize(samples)
         dequantize_embed = self.dequantize(stoks).to(self.whmodel[0].device)
-
         # Decode text
         return self.whmodel[0].decode(dequantize_embed, self.decoding_options)
 
