@@ -187,8 +187,11 @@ class WhisperDataset(Dataset):
             if samples.abs().max() > 0:
                 samples = samples / samples.abs().max()
 
-            # Pad audio
-            samples = self.pad_audio(samples)
+            if len(samples) > self.max_audio_length:
+                samples = samples[: self.max_audio_length]
+
+            # # Pad audio
+            # samples = self.pad_audio(samples)
 
             if samples.abs().max() > 0:
                 samples = samples / samples.abs().max()
@@ -228,13 +231,13 @@ class WhisperDataset(Dataset):
             if samples.abs().max() > 0:
                 samples = samples / samples.abs().max()
 
-            # Pad audio
-            samples = self.pad_audio(samples)
-
             # Create mask for attention
             mask = torch.zeros(30 * 16000 // 320, dtype=torch.bool)
             audio_frames = min(len(samples), self.max_audio_length) // 320
             mask[:audio_frames] = 1
+
+            # Pad audio
+            samples = self.pad_audio(samples)
 
             # Process text tokens
             tokens = list(
@@ -291,13 +294,13 @@ class WhisperDataset(Dataset):
         concatenated_audio = torch.cat(audio_samples)
         concatenated_text = " ".join(texts)
 
-        # Pad if necessary
-        concatenated_audio = self.pad_audio(concatenated_audio)
-
         # Create mask for attention
         mask = torch.zeros(30 * 16000 // 320, dtype=torch.bool)
         audio_frames = min(len(concatenated_audio), self.max_audio_length) // 320
         mask[:audio_frames] = 1
+
+        # Pad if necessary
+        concatenated_audio = self.pad_audio(concatenated_audio)
 
         # Process text tokens
         tokens = list(
