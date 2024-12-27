@@ -440,14 +440,8 @@ class WhisperVQTrainer:
 
         # Create histogram table
         token_data = [[int(token)] for token in all_tokens]
-        hist_table = wandb.Table(data=token_data, columns=["token_index"])
-
-        # Create custom histogram plot
-        token_hist = wandb.plot.histogram(
-            hist_table,
-            value="token_index",
-            title="Distribution of Token Indices During Inference",
-        )
+        token_df = pd.DataFrame(token_data, columns=["token_index"])
+        token_df.to_csv("all_tokens.csv", index=False)
 
         # WER chart
         avg_model_wer = sum(r["model_wer"] for r in results) / len(results)
@@ -475,7 +469,6 @@ class WhisperVQTrainer:
             "avg_whisper_wer": avg_whisper_wer,
             "avg_phowhisper_wer": avg_phowhisper_wer,
             "wer_comparison": wer_chart,
-            "token_distribution": token_hist,
         }
         self.wandb_logger.experiment.log(metrics)
 
