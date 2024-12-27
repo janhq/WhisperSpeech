@@ -48,7 +48,7 @@ def parse_args():
 
 
 def merge_codebooks(checkpoint_512_path, checkpoint_2048_path):
-    """Merge codebooks from two checkpoints, putting 512 first then 2048"""
+    """Merge codebooks from two checkpoints, putting 2049 first then 512"""
 
     checkpoint_512 = torch.load(checkpoint_512_path)
     checkpoint_2048 = torch.load(checkpoint_2048_path)
@@ -72,8 +72,8 @@ def merge_codebooks(checkpoint_512_path, checkpoint_2048_path):
     # Create new merged state dict - start with 2048 as it has all the necessary keys
     merged_state_dict = state_dict_2048.copy()
 
-    # Calculate new size: 512 (without mask) + 2049 (with mask) = 2561
-    new_size = codebook_512.shape[1] + codebook_2048.shape[1]
+    # Calculate new size: 2048 (with mask) + 512 (without mask) = 2561
+    new_size = codebook_2048.shape[1] + codebook_512.shape[1]
 
     # ! Reset codebook usage to zeros
     if "_codebook_usage" in merged_state_dict:
@@ -89,10 +89,10 @@ def merge_codebooks(checkpoint_512_path, checkpoint_2048_path):
         dtype=codebook_2048.dtype,
         device=codebook_2048.device,
     )
-    # First copy 512 (excluding mask token)
-    new_codebook[:, : codebook_512.shape[1], :] = codebook_512
-    # Then copy all from 2049 (including mask token)
-    new_codebook[:, codebook_512.shape[1] :, :] = codebook_2048
+    # First copy 2048 (including mask token)
+    new_codebook[:, : codebook_2048.shape[1], :] = codebook_2048
+    # Then copy all from 512 (excluding mask token)
+    new_codebook[:, codebook_2048.shape[1] :, :] = codebook_512
     merged_state_dict["rq.layers.0._codebook.embed"] = new_codebook
 
     # ! Merge cluster_size
@@ -105,8 +105,8 @@ def merge_codebooks(checkpoint_512_path, checkpoint_2048_path):
         dtype=old_cluster_size_2048.dtype,
         device=old_cluster_size_2048.device,
     )
-    new_cluster_size[:, : old_512_cluster_size.shape[1]] = old_512_cluster_size
-    new_cluster_size[:, old_512_cluster_size.shape[1] :] = old_cluster_size_2048
+    new_cluster_size[:, : old_cluster_size_2048.shape[1]] = old_cluster_size_2048
+    new_cluster_size[:, old_cluster_size_2048.shape[1] :] = old_512_cluster_size
     merged_state_dict["rq.layers.0._codebook.cluster_size"] = new_cluster_size
 
     # ! Merge embed_avg
@@ -119,8 +119,8 @@ def merge_codebooks(checkpoint_512_path, checkpoint_2048_path):
         dtype=old_embed_avg_2048.dtype,
         device=old_embed_avg_2048.device,
     )
-    new_embed_avg[:, : old_512_embed_avg.shape[1], :] = old_512_embed_avg
-    new_embed_avg[:, old_512_embed_avg.shape[1] :, :] = old_embed_avg_2048
+    new_embed_avg[:, : old_embed_avg_2048.shape[1], :] = old_embed_avg_2048
+    new_embed_avg[:, old_embed_avg_2048.shape[1] :, :] = old_512_embed_avg
     merged_state_dict["rq.layers.0._codebook.embed_avg"] = new_embed_avg
 
     return merged_state_dict

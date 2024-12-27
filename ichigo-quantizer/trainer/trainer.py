@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import lightning.pytorch as pl
+import numpy as np
 import pandas as pd
 import torch
 import whisper
@@ -360,10 +361,16 @@ class WhisperVQTrainer:
             total=len(test_dataset), desc="Generating predictions", unit="samples"
         )
 
+        # Store all tokens for distribution analysis
+        all_tokens = []
+
         with torch.no_grad():
             for batch_idx, (samples, output_toks) in enumerate(test_loader):
                 samples = samples.cuda()
                 decoded_results = model.inference(samples)
+
+                # Collect tokens from this batch
+                all_tokens.append(model.last_tokens.flatten())
 
                 for i in range(len(samples)):
                     gt_tokens = output_toks[i][output_toks[i] != -100]
@@ -428,6 +435,42 @@ class WhisperVQTrainer:
 
         progress_bar.close()
 
+        # Create token distribution histogram
+        all_tokens = torch.cat(all_tokens).numpy()
+
+        # Create histogram table
+        token_data = [[int(token)] for token in all_tokens]
+        hist_table = wandb.Table(data=token_data, columns=["token_index"])
+
+        # Create custom histogram plot
+        token_hist = wandb.plot.histogram(
+            hist_table,
+            value="token_index",
+            title="Distribution of Token Indices During Inference",
+        )
+
+        # Calculate some statistics
+        total_tokens = len(all_tokens)
+        unique_tokens = len(np.unique(all_tokens))
+        token_counts = np.bincount(all_tokens)
+        top_10_tokens = np.argsort(token_counts)[-10:]
+        top_10_frequencies = token_counts[top_10_tokens] / total_tokens * 100
+
+        # Create bar chart for top 10 most frequent tokens
+        top_tokens_data = [
+            [f"Token {tok}", float(freq)]
+            for tok, freq in zip(top_10_tokens, top_10_frequencies)
+        ]
+        top_tokens_table = wandb.Table(
+            data=top_tokens_data, columns=["Token", "Frequency (%)"]
+        )
+        top_tokens_chart = wandb.plot.bar(
+            top_tokens_table,
+            "Token",
+            "Frequency (%)",
+            title="Top 10 Most Frequent Tokens",
+        )
+
         # WER chart
         avg_model_wer = sum(r["model_wer"] for r in results) / len(results)
         avg_whisper_wer = sum(r["whisper_wer"] for r in results) / len(results)
@@ -454,6 +497,13 @@ class WhisperVQTrainer:
             "avg_whisper_wer": avg_whisper_wer,
             "avg_phowhisper_wer": avg_phowhisper_wer,
             "wer_comparison": wer_chart,
+            "token_distribution": token_hist,
+            "top_tokens": top_tokens_chart,
+            "token_stats": {
+                "total_tokens": total_tokens,
+                "unique_tokens": unique_tokens,
+                "token_coverage": (unique_tokens / model.vq_codes) * 100,
+            },
         }
         self.wandb_logger.experiment.log(metrics)
 

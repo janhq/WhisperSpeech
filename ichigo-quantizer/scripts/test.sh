@@ -7,7 +7,7 @@ WANDB_ENTITY="janai" CUDA_VISIBLE_DEVICES=0 python -m scripts.test \
     --whisper-name "medium" \
     --language "vi" \
     --batch-size 1 \
-    --num-samples 10000
+    --num-samples 1000
 
 # LibriTTS-R w/ merge base codebook
 WANDB_ENTITY="janai" CUDA_VISIBLE_DEVICES=1 python -m scripts.test \
@@ -18,4 +18,4 @@ WANDB_ENTITY="janai" CUDA_VISIBLE_DEVICES=1 python -m scripts.test \
     --whisper-name "medium" \
     --language "en" \
     --batch-size 1 \
-    --num-samples 4689
+    --num-samples 1000
