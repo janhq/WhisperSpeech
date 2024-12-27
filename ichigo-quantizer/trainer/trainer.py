@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import lightning.pytorch as pl
+import numpy as np
 import pandas as pd
 import torch
 import whisper
@@ -360,10 +361,16 @@ class WhisperVQTrainer:
             total=len(test_dataset), desc="Generating predictions", unit="samples"
         )
 
+        # Store all tokens for distribution analysis
+        all_tokens = []
+
         with torch.no_grad():
             for batch_idx, (samples, output_toks) in enumerate(test_loader):
                 samples = samples.cuda()
                 decoded_results = model.inference(samples)
+
+                # Collect tokens
+                all_tokens.append(model.stoks_id.flatten())
 
                 for i in range(len(samples)):
                     gt_tokens = output_toks[i][output_toks[i] != -100]
@@ -427,6 +434,14 @@ class WhisperVQTrainer:
                     progress_bar.update(1)
 
         progress_bar.close()
+
+        # Create token distribution histogram
+        all_tokens = torch.cat(all_tokens).numpy()
+
+        # Create histogram table
+        token_data = [[int(token)] for token in all_tokens]
+        token_df = pd.DataFrame(token_data, columns=["token_index"])
+        token_df.to_csv("all_tokens.csv", index=False)
 
         # WER chart
         avg_model_wer = sum(r["model_wer"] for r in results) / len(results)

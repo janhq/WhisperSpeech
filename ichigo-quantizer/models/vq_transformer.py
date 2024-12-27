@@ -353,8 +353,11 @@ class RQBottleneckTransformer(nn.Module):
         stoks = F.pad(
             stoks,
             (0, self.stoks_len - stoks.shape[-1]),
-            value=self.vq_codes if self.config.mask_embs else 0,
+            value=2048 if self.config.mask_embs else 0,  # TODO: don't hardcode this
         )
+
+        # Store stoks_id for visualization
+        self.stoks_id = stoks.cpu()
 
         x = self.rq.layers[0]._codebook.embed[0, stoks.to(torch.long).view(-1)]
         x = x.repeat_interleave(self.downsample, -2)

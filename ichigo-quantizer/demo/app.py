@@ -21,8 +21,8 @@ from models.factory import make_vq_model
 # from trainer.utils import clean_whisper_text
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-Ichigo_name = "jan-hq/ichigo-quantizer:epoch_accuracy=0.95.ckpt"
-model_size = "medium-vi-2d-2048c-dim64"
+Ichigo_name = "homebrewltd/ichigo-whisper:merge-medium-vi-2d-2560c-dim64.pth"
+model_size = "merge-medium-vi-2d-2560c-dim64"
 whisper_model_name = "medium"
 language = "demo"
 
@@ -141,7 +141,7 @@ with gr.Blocks(title="Ichigo Whisper Quantizer") as interface:
     with gr.Row():
         # Ichigo Model Column
         with gr.Column():
-            gr.Markdown("### Ichigo Quantizer (Medium)")
+            gr.Markdown("### Ichigo Quantizer (Merged Codebook - Medium)")
             ichigo_output = gr.TextArea(
                 label="Ichigo Transcription",
                 placeholder="Transcription will appear here...",
