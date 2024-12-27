@@ -124,6 +124,7 @@ def merge_codebooks(checkpoint_512_path, checkpoint_2048_path, save_local=False)
 
     if save_local:
         checkpoint_2560 = checkpoint_2048.copy()
+        merged_state_dict = {f"model.{k}": v for k, v in merged_state_dict.items()}
         checkpoint_2560["state_dict"] = merged_state_dict
         torch.save(checkpoint_2560, "merge-medium-vi-2d-2560c-dim64.pth")
 
@@ -149,13 +150,19 @@ def main():
     merged_state_dict = merge_codebooks(
         args.basevq_path,
         args.model_path,
-    )
+    )  # TODO: comment this line if load merged ckpt directly
 
     # Load model
     model = make_vq_model(args.model_size, config=vq_config)
     model.load_state_dict(merged_state_dict)
     lightning_module = WhisperVQModule(model, trainer_config)
     model = lightning_module.model
+
+    # TODO: uncomment this block if load merged ckpt directly
+    # model = make_vq_model(args.model_size, config=vq_config)
+    # lightning_module = WhisperVQModule(model, trainer_config)
+    # lightning_module.load_from_checkpoint(args.model_path)
+    # model = lightning_module.model
 
     model.setup(device="cuda", language=args.language)
 
