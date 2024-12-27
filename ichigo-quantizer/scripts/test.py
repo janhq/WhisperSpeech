@@ -27,7 +27,6 @@ def parse_args():
     parser.add_argument(
         "--basevq-path",
         type=str,
-        required=True,
         help="Path to base WhisperVQ checkpoint",
     )
     parser.add_argument(
@@ -47,7 +46,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def merge_codebooks(checkpoint_512_path, checkpoint_2048_path):
+def merge_codebooks(checkpoint_512_path, checkpoint_2048_path, save_local=False):
     """Merge codebooks from two checkpoints, putting 2049 first then 512"""
 
     checkpoint_512 = torch.load(checkpoint_512_path)
@@ -122,6 +121,11 @@ def merge_codebooks(checkpoint_512_path, checkpoint_2048_path):
     new_embed_avg[:, : old_embed_avg_2048.shape[1], :] = old_embed_avg_2048
     new_embed_avg[:, old_embed_avg_2048.shape[1] :, :] = old_512_embed_avg
     merged_state_dict["rq.layers.0._codebook.embed_avg"] = new_embed_avg
+
+    if save_local:
+        checkpoint_2560 = checkpoint_2048.copy()
+        checkpoint_2560["state_dict"] = merged_state_dict
+        torch.save(checkpoint_2560, "merge-medium-vi-2d-2560c-dim64.pth")
 
     return merged_state_dict
 
