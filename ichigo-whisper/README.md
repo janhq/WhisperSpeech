@@ -29,6 +29,11 @@ After training, modify inference config and run scripts
 sh scripts/test.sh
 ```
 
+## Inference
+```bash
+python demo/inference.py --input path/to/your/audio.wav
+```
+
 ## Demo
 ```python
 python demo/app.py
