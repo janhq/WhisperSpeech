@@ -150,4 +150,4 @@ with gr.Blocks(title="Ichigo Whisper", theme="allenai/gradio-theme") as interfac
 
 if __name__ == "__main__":
     interface.queue()
-    interface.launch("0.0.0.0", 7860, share=True)
+    interface.launch(server_name="0.0.0.0", server_port=7860, share=True)
