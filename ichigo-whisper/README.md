@@ -31,7 +31,7 @@ sh scripts/test.sh
 
 ## Inference
 ```bash
-python inference.py --input path/to/your/audio.wav
+python demo/inference.py --input path/to/your/audio.wav
 ```
 
 ## Demo
