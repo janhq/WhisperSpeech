@@ -46,7 +46,7 @@ We introduce a method for initializing the codebook weights in the VQ model. Ins
 <div align="center">
 
   <img src="images/ichigowhisper-mergecode.png" width="550"/>
-  <p><small>Codebook initialation of Ichigo Whisper</a></small></p>
+  <p><small>Codebook initialization of Ichigo Whisper</a></small></p>
 </div>
 
 
