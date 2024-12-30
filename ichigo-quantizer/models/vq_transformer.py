@@ -346,9 +346,9 @@ class RQBottleneckTransformer(nn.Module):
         assert self.q_depth == 1
         assert len(stoks.shape) == 1, "batch processing is not supported"
 
-        padding = torch.nonzero(stoks == self.vq_codes)
-        if padding.any():
-            stoks = stoks[: padding[0, 0]]
+        # padding = torch.nonzero(stoks == self.vq_codes)
+        # if padding.any():
+        #     stoks = stoks[: padding[0, 0]]
 
         stoks = F.pad(
             stoks,
