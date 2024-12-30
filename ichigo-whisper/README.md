@@ -1,15 +1,15 @@
-# Ichigo Quantizer 
+# IchigoWhisper 
 
 ## Installation
 1. Create virtual enviroment
    ```bash
-   python -m venv iq
-   source iq/bin/activate
+   python -m venv ichigo-whisper
+   source ichigo-whisper/bin/activate
    ```
 2. Clone the repository and install requirement packages (Python 3.11)
    ```bash
    git clone https://github.com/janhq/WhisperSpeech.git
-   cd WhisperSpeech/ichigo-quantizer
+   cd WhisperSpeech/ichigo-whisper
    pip install -r requirements.txt
    ```
 3. Login Huggingface CLI and WandB
