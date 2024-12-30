@@ -32,7 +32,7 @@ ichigo_model.to(device)
 
 phowhisper = pipeline(
     "automatic-speech-recognition",
-    model="vinai/PhoWhisper-large",
+    model="vinai/PhoWhisper-medium",
     device=device,
 )
 
@@ -77,24 +77,27 @@ def transcribe_phowhisper(inputs):
     return phowhisper(audio_sample)["text"]
 
 
-with gr.Blocks(title="Ichigo Whisper Quantizer") as interface:
+with gr.Blocks(title="Ichigo Whisper", theme="allenai/gradio-theme") as interface:
+    gr.Markdown("# 🍰 Ichigo Whisper")
     gr.Markdown(
-        "# Ichigo Whisper Quantizer: Enhanced Whisper Model for Low-Resource Languages Using Quantization"
+        "Ichigo Whisper is a compact (22M parameters), open-source quantizer for the Whisper-medium model, designed to enhance performance on low-resource languages with minimal impact on its original English capabilities. Unlike models that output continuous embeddings, Ichigo Whisper compresses speech into discrete tokens, making it more compatible with large language models (LLMs) for immediate speech understanding. This quantized version of Whisper-medium has been trained on over ~400 hours of English data and ~1000 hours of Vietnamese data."
     )
-    gr.Markdown("Record your voice or upload audio and send it to the model.")
-    gr.Markdown("Powered by [Homebrew Ltd](https://homebrew.ltd/)")
+    gr.Markdown("Ichigo Whisper is a key component of the Ichigo v0.5 family.")
+    gr.Markdown(
+        "For more details, please refer to our official [blog post.](https://huggingface.co/homebrewltd/Ichigo-whisper-v0.1)"
+    )
     with gr.Row():
         # Audio input section
         audio_input = gr.Audio(
-            sources=["microphone", "upload"], type="filepath", label="Audio Input"
+            sources=["microphone"], type="filepath", label="Audio Input"
         )
 
     with gr.Row():
         # Ichigo Model Column
         with gr.Column():
-            gr.Markdown("### Ichigo Quantizer (Merged Codebook - Medium)")
+            gr.Markdown("### Ichigo Whisper")
             ichigo_output = gr.TextArea(
-                label="Ichigo Transcription",
+                label="Transcription",
                 placeholder="Transcription will appear here...",
                 lines=8,
             )
@@ -107,7 +110,7 @@ with gr.Blocks(title="Ichigo Whisper Quantizer") as interface:
         with gr.Column():
             gr.Markdown(f"### Whisper {whisper_model_name.capitalize()}")
             whisper_output = gr.TextArea(
-                label="Whisper Transcription",
+                label="Transcription",
                 placeholder="Transcription will appear here...",
                 lines=8,
             )
@@ -118,9 +121,9 @@ with gr.Blocks(title="Ichigo Whisper Quantizer") as interface:
 
         # PhoWhisper Model Column
         with gr.Column():
-            gr.Markdown("### PhoWhisper Large")
+            gr.Markdown("### PhoWhisper Medium")
             phowhisper_output = gr.TextArea(
-                label="PhoWhisper Transcription",
+                label="Transcription",
                 placeholder="Transcription will appear here...",
                 lines=8,
             )
