@@ -457,7 +457,8 @@ class RQBottleneckTransformer(nn.Module):
         if language == "demo" and not is_train:
             print("🚀 Setting decoding options for demo with custom prompt")
             self.decoding_options = whisper.DecodingOptions(
-                prompt="You are a professional transcriber, fluent in Vietnamese and English. You are listening to a recording in which a person is potentially speaking both Vietnamese and English, and no other languages. They may be speaking only one of these languages. They may have a strong accent. You are to transcribe utterances of each language accordingly"
+                prompt="Bạn là một chuyên gia phiên âm, thông thạo cả tiếng Việt và tiếng Anh. Nhiệm vụ của bạn là phiên âm một bản ghi âm mà trong đó người nói có thể sử dụng cả hai ngôn ngữ (tiếng Việt và tiếng Anh) hoặc chỉ sử dụng một trong hai. Bản ghi âm không bao gồm ngôn ngữ nào khác. Người nói có thể có giọng địa phương khi nói bất kỳ ngôn ngữ nào. Mục tiêu của bạn là phiên âm chính xác mọi nội dung được nói bằng ngôn ngữ tương ứng. Nếu bạn thấy bất kỳ phần dịch nào không có ý nghĩa hoặc không chính xác, bạn có thể chỉnh sửa để đảm bảo nội dung rõ ràng và đúng đắn.",
+                fp16=False,
             )
         elif language in ["en", "vi"] and not is_train:
             print(f"🍓 Setting testing options for {language}")

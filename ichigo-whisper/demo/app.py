@@ -18,7 +18,7 @@ from utils import load_model
 # from trainer.utils import clean_whisper_text
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-Ichigo_name = "homebrewltd/ichigo-whisper:merge-medium-vi-2d-2560c-dim64.pth"
+ichigo_name = "homebrewltd/ichigo-whisper:merge-medium-vi-2d-2560c-dim64.pth"
 model_size = "merge-medium-vi-2d-2560c-dim64"
 whisper_model_name = "medium"
 language = "demo"
@@ -26,7 +26,7 @@ language = "demo"
 whisper_model = whisper.load_model(whisper_model_name)
 whisper_model.to(device)
 
-ichigo_model = load_model(ref=Ichigo_name, size=model_size)
+ichigo_model = load_model(ref=ichigo_name, size=model_size)
 ichigo_model.ensure_whisper(device, language)
 ichigo_model.to(device)
 
@@ -89,7 +89,7 @@ with gr.Blocks(title="Ichigo Whisper", theme="allenai/gradio-theme") as interfac
     with gr.Row():
         # Audio input section
         audio_input = gr.Audio(
-            sources=["microphone"], type="filepath", label="Audio Input"
+            sources=["microphone", "upload"], type="filepath", label="Audio Input"
         )
 
     with gr.Row():
@@ -150,4 +150,4 @@ with gr.Blocks(title="Ichigo Whisper", theme="allenai/gradio-theme") as interfac
 
 if __name__ == "__main__":
     interface.queue()
-    interface.launch(server_name="0.0.0.0", server_port=7860, share=True)
+    interface.launch(server_name="0.0.0.0", server_port=7861, share=True)
