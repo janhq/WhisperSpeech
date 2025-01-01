@@ -16,7 +16,7 @@
 
 ## About
 
-Ichigo-Whisper is a compact (22M parameters), open-source quantizer designed to enhance the performance of the `Whisper-medium` model, particularly for **low-resource languages**, while maintaining strong English language capabilities.
+Ichigo-Whisper is a compact (22M parameters), open-source speech tokenizer designed to enhance the performance of the `Whisper-medium` model, particularly for multilingual, while maintaining strong English language capabilities.
 
 Unlike models that output continuous embeddings, Ichigo-Whisper compresses speech into **discrete tokens**. This approach makes it more compatible with large language models (LLMs) for immediate speech understanding and downstream tasks.
 
@@ -29,7 +29,7 @@ Unlike models that output continuous embeddings, Ichigo-Whisper compresses speec
 
 - Only 22M parameters, enabling deployment in resource-constrained environments.
 - Specifically trained to improve performance on languages with limited data.
-- Outputs quantized tokens, facilitating integration with LLMs.
+- Outputs discrete tokens, facilitating integration with LLMs.
 - Trained on ~400 hours of English and ~1000 hours of Vietnamese data, demonstrating strong performance in both languages.
 - Part of a larger family of models for multilingual speech processing.
 
