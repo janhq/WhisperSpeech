@@ -68,7 +68,7 @@ sh scripts/test.sh
 ```bash
 python demo/inference.py -i path/to/your/audio.wav 
 
-# Test example 
+# example 
 # python demo/inference.py -i demo/samples/test.wav
 ```
 
@@ -98,4 +98,4 @@ You can try the demo directly at [Ichigo-Whisper](https://ichigo-whisper.homebre
 
 - **[Vivoice](https://huggingface.co/datasets/capleaf/viVoice)**
 
-- **[LibriTTS]**
+- **[LibriTTS-R](https://huggingface.co/datasets/parler-tts/libritts_r_filtered)**
