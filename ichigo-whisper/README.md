@@ -23,7 +23,7 @@ For more details, please refer to our official [blog post](https://huggingface.c
 ## Get Started
 
 ### Installation
-1. Create virtual enviroment
+1. Create virtual enviroment (venv/conda)
    ```bash
    # venv
    python -m venv ichigo-whisper
@@ -34,7 +34,7 @@ For more details, please refer to our official [blog post](https://huggingface.c
    conda activate ichigo-whisper                                                                                                                                                             
    ```
 
-2. Clone the repository and install requirement packages (Python 3.11)
+2. Clone the repository and install requirement packages
    ```bash
    git clone https://github.com/janhq/WhisperSpeech.git
    cd WhisperSpeech/ichigo-whisper
@@ -68,7 +68,7 @@ sh scripts/test.sh
 ```bash
 python demo/inference.py -i path/to/your/audio.wav 
 
-# example 
+# Example 
 # python demo/inference.py -i demo/samples/test.wav
 ```
 
@@ -78,23 +78,23 @@ python demo/inference.py -i path/to/your/audio.wav
 python demo/app.py
 ```
 
-You can try the demo directly at [Ichigo-Whisper](https://ichigo-whisper.homebrew.ltd/)
+You can try the demo directly in [here.](https://ichigo-whisper.homebrew.ltd/)
 
 # Citation
 ```
-@article{IchigoWhisper 2024,
-  title={IchigoWhisper},
+@article{IchigoWhisper-2024,
+  title={Ichigo Whisper},
   author={Homebrew Research},
   year=2024,
   month=December},
-  url={https://huggingface.co/homebrewltd/Ichigo-whisper}
+  url={https://huggingface.co/homebrewltd/Ichigo-whisper-v0.1}
 ```
 
 # Acknowledgement
 
 - **[WhisperSpeech](https://github.com/collabora/WhisperSpeech)**
 
-- **[Whisper](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct)**
+- **[Whisper](https://github.com/openai/whisper)**
 
 - **[Vivoice](https://huggingface.co/datasets/capleaf/viVoice)**
 
