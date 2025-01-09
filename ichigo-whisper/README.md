@@ -96,38 +96,55 @@ We employ a two-phase training strategy to optimize Ichigo-Whisper's performance
 ### Installation
 1. Create virtual enviroment
    ```bash
+   # venv
    python -m venv ichigo-whisper
    source ichigo-whisper/bin/activate
+
+   # conda 
+   conda create -n ichigo-whisper python=3.11
+   conda activate ichigo-whisper                                                                                                                                                             
    ```
-2. Clone the repository and install requirement packages (Python 3.11)
+
+2. Clone the repository and install requirement packages
    ```bash
    git clone https://github.com/janhq/WhisperSpeech.git
    cd WhisperSpeech/ichigo-whisper
    pip install -r requirements.txt
    ```
-3. Login Huggingface CLI and WandB
+
+3. Login Huggingface CLI and WandB (Optional for training)
    ```bash
    huggingface-cli login
    wandb login
    ```
+
 ### Training
 Modify config and run scripts
+
 ```bash
 sh scripts/train_multi.sh
 ```
 
 ### Testing
+
+
 After training, modify inference config and run scripts
+
 ```bash
 sh scripts/test.sh
 ```
 
 ### Inference
+
 ```bash
-python demo/inference.py --input path/to/your/audio.wav
+python demo/inference.py -i path/to/your/audio.wav 
+
+# Example 
+# python demo/inference.py -i demo/samples/test.wav
 ```
 
 ### Demo
+
 ```python
 python demo/app.py
 ```
@@ -141,3 +158,24 @@ python demo/app.py
 - [WhisperSpeech](https://github.com/collabora/WhisperSpeech): Text-to-speech model for synthetic audio generation
 - [Gradio](https://www.gradio.app/): A user-friendly library for building Ichigo-Whisper demo
 
+You can try the demo directly in [here.](https://ichigo-whisper.homebrew.ltd/)
+
+# Citation
+```
+@article{IchigoWhisper-2024,
+  title={Ichigo Whisper},
+  author={Homebrew Research},
+  year=2024,
+  month=December},
+  url={https://huggingface.co/homebrewltd/Ichigo-whisper-v0.1}
+```
+
+# Acknowledgement
+
+- **[WhisperSpeech](https://github.com/collabora/WhisperSpeech)**
+
+- **[Whisper](https://github.com/openai/whisper)**
+
+- **[Vivoice](https://huggingface.co/datasets/capleaf/viVoice)**
+
+- **[LibriTTS-R](https://huggingface.co/datasets/parler-tts/libritts_r_filtered)**
