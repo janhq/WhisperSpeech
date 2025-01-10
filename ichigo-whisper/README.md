@@ -20,9 +20,17 @@ Ichigo Whisper is a key component of the [Ichigo v0.5 family](https://github.com
 For more details, please refer to our official [blog post](https://huggingface.co/homebrewltd/Ichigo-whisper-v0.1).
 
 
-## Get Started
+## Installation
 
-### Installation
+### From wheel
+
+```bash
+git clone https://github.com/janhq/WhisperSpeech.git
+cd WhisperSpeech/ichigo-whisper
+pip install -e .
+```
+
+### From source 
 1. Create virtual enviroment (venv/conda)
    ```bash
    # venv
@@ -39,6 +47,7 @@ For more details, please refer to our official [blog post](https://huggingface.c
    git clone https://github.com/janhq/WhisperSpeech.git
    cd WhisperSpeech/ichigo-whisper
    pip install -r requirements.txt
+   cd src/ichigo-whisper
    ```
 
 3. Login Huggingface CLI and WandB (Optional for training)
@@ -47,7 +56,7 @@ For more details, please refer to our official [blog post](https://huggingface.c
    wandb login
    ```
 
-### Training
+## Training
 
 Modify config and run scripts
 
@@ -55,7 +64,7 @@ Modify config and run scripts
 sh scripts/train_multi.sh
 ```
 
-### Testing
+## Testing
 
 After training, modify inference config and run scripts
 
@@ -63,7 +72,7 @@ After training, modify inference config and run scripts
 sh scripts/test.sh
 ```
 
-### Inference
+## Inference
 
 ```bash
 python demo/inference.py -i path/to/your/audio.wav 
@@ -72,7 +81,7 @@ python demo/inference.py -i path/to/your/audio.wav
 # python demo/inference.py -i demo/samples/test.wav
 ```
 
-### Demo
+## Demo
 
 ```python
 python demo/app.py
@@ -80,7 +89,7 @@ python demo/app.py
 
 You can try the demo directly in [here.](https://ichigo-whisper.homebrew.ltd/)
 
-# Citation
+## Citation
 ```
 @article{IchigoWhisper-2024,
   title={Ichigo Whisper},
