@@ -442,11 +442,11 @@ class RQBottleneckTransformer(nn.Module):
         self.val_total[:] = 0
         return metrics
 
-    def setup(self, device, language=None, prompt=None):
+    def setup(self, device, language=None, is_train=None):
         """Setup the model on specified device"""
-        self.ensure_whisper(device=device, language=language, prompt=prompt)
+        self.ensure_whisper(device=device, language=language, is_train=is_train)
 
-    def ensure_whisper(self, device=None, language=None, prompt=None):
+    def ensure_whisper(self, device=None, language=None, is_train=None):
         """Ensure Whisper model is loaded"""
         if self.whmodel is not None:
             return
@@ -454,18 +454,15 @@ class RQBottleneckTransformer(nn.Module):
 
         if self.whmodel is None:
             self.whmodel = [whisper.load_model(self.whisper_model_name, device=device)]
-        params = {}
-        if language is not None:
-            params['language'] = language
-            if language in ['en', 'vi']:
-                print(f"🍓 Setting testing options for {language}")
-                
-        if prompt is not None:
+        if language == "demo" and not is_train:
             print("🚀 Setting decoding options for demo with custom prompt")
-            params['prompt'] = prompt
-            
-        self.decoding_options = whisper.DecodingOptions(**params)
-        
+            self.decoding_options = whisper.DecodingOptions(
+                prompt="You are a professional transcriptionist fluent in both Vietnamese and English. You are tasked with transcribing an audio recording in which the speaker may switch between Vietnamese and English or speak entirely in one of these two languages. No other languages are present in the recording. The speaker may have a regional accent in either language. Your goal is to provide an accurate transcription of all spoken content in the appropriate language. If a translated section appears nonsensical or inaccurate, feel free to revise it to ensure clarity and correctness.",
+                fp16=False,
+            )
+        elif language in ["en", "vi"] and not is_train:
+            print(f"🍓 Setting testing options for {language}")
+            self.decoding_options = whisper.DecodingOptions(language=language)
         self.tokenizer = get_tokenizer(self.whisper_model_name, None)
 
     @property

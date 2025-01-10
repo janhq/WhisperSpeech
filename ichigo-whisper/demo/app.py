@@ -21,13 +21,13 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 ichigo_name = "homebrewltd/ichigo-whisper:merge-medium-vi-2d-2560c-dim64.pth"
 model_size = "merge-medium-vi-2d-2560c-dim64"
 whisper_model_name = "medium"
-prompt="You are a professional transcriptionist fluent in both Vietnamese and English. You are tasked with transcribing an audio recording in which the speaker may switch between Vietnamese and English or speak entirely in one of these two languages. No other languages are present in the recording. The speaker may have a regional accent in either language. Your goal is to provide an accurate transcription of all spoken content in the appropriate language. If a translated section appears nonsensical or inaccurate, feel free to revise it to ensure clarity and correctness."
+language = "demo"
 
 whisper_model = whisper.load_model(whisper_model_name)
 whisper_model.to(device)
 
 ichigo_model = load_model(ref=ichigo_name, size=model_size)
-ichigo_model.ensure_whisper(device, prompt=prompt)
+ichigo_model.ensure_whisper(device, language)
 ichigo_model.to(device)
 
 phowhisper = pipeline(
