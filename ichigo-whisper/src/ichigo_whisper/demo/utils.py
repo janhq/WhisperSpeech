@@ -3,8 +3,8 @@ import os
 import torch
 from huggingface_hub import hf_hub_download
 
-from config.vq_config import VQConfig
-from models.factory import make_vq_model
+from ichigo_whisper.config.vq_config import VQConfig
+from ichigo_whisper.models.factory import make_vq_model
 
 
 def load_model(
