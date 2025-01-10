@@ -15,21 +15,27 @@ from transformers import pipeline
 
 from ichigo_whisper.demo.utils import load_model
 
-# from trainer.utils import clean_whisper_text
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# ! Ichigo Whisper
 ichigo_name = "homebrewltd/ichigo-whisper:merge-medium-vi-2d-2560c-dim64.pth"
 model_size = "merge-medium-vi-2d-2560c-dim64"
-whisper_model_name = "medium"
-language = "demo"
+ichigo_prompt = """
+You are a professional transcriptionist fluent in both Vietnamese and English. 
+You are tasked with transcribing an audio recording in which the speaker may switch between Vietnamese and English or speak entirely in one of these two languages. 
+No other languages are present in the recording. The speaker may have a regional accent in either language. Your goal is to provide an accurate transcription of all spoken content in the appropriate language. 
+If a translated section appears nonsensical or inaccurate, feel free to revise it to ensure clarity and correctness.
+"""
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
+ichigo_model = load_model(ref=ichigo_name, size=model_size)
+ichigo_model.ensure_whisper(device, prompt=ichigo_prompt)
+ichigo_model.to(device)
+
+# ! Whisper Medium
+whisper_model_name = "medium"
 whisper_model = whisper.load_model(whisper_model_name)
 whisper_model.to(device)
 
-ichigo_model = load_model(ref=ichigo_name, size=model_size)
-ichigo_model.ensure_whisper(device, language)
-ichigo_model.to(device)
-
+# ! PhoWhisper Medium
 phowhisper = pipeline(
     "automatic-speech-recognition",
     model="vinai/PhoWhisper-medium",
@@ -46,7 +52,6 @@ def transcribe_ichigo(inputs):
     if sr != 16000:
         wav = torchaudio.functional.resample(wav, sr, 16000)
     transcribe = ichigo_model.inference(wav.to(device))
-    # return clean_whisper_text(transcribe[0].text)
     return transcribe[0].text
 
 
@@ -64,7 +69,6 @@ def transcribe_whisper(inputs):
         task="transcribe",
         fp16=False,
     )
-    # return clean_whisper_text(transcribe["text"])
     return transcribe["text"]
 
 
@@ -73,7 +77,6 @@ def transcribe_phowhisper(inputs):
     if sr != 16000:
         wav2 = torchaudio.functional.resample(wav2, sr, 16000)
     audio_sample = wav2.squeeze().float().numpy()
-    # return clean_whisper_text(phowhisper(audio_sample)["text"])
     return phowhisper(audio_sample)["text"]
 
 
