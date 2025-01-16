@@ -91,10 +91,44 @@ We employ a two-phase training strategy to optimize Ichigo-Whisper's performance
 *   **Phase 2:** Recognizing that solely relying on Whisper-medium's output can limit performance, we introduce further training in this phase.
 *   **Data Mixing:** We mix Vietnamese and English data in a ratio of approximately 7:3 during training. This helps maintain English capabilities while significantly enhancing Vietnamese performance.
 
-## How to Get Started
+## How to Get Started 
 
-### Installation
-1. Create virtual enviroment (optional for source)
+### PyPI
+
+<!-- python -m build
+python -m twine upload dist/* -->
+
+1. Install python package
+
+```bash
+pip install ichigo-whisper
+```
+
+2. Inference with your audio
+
+```python
+from ichigo_whisper.demo.utils import load_model
+
+# Load Ichigo Whisper
+ichigo_model = load_model(
+        ref="homebrewltd/ichigo-whisper:merge-medium-vi-2d-2560c-dim64.pth",
+        size="merge-medium-vi-2d-2560c-dim64",
+)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+ichigo_model.ensure_whisper(device, language="demo")
+ichigo_model.to(device)
+
+# Inference
+wav, sr = torchaudio.load("path/to/your/audio")
+if sr != 16000:
+   wav = torchaudio.functional.resample(wav, sr, 16000)
+transcribe = ichigo_model.inference(wav.to(device))
+print(transcribe[0].text)
+```
+
+### Installation from source
+
+1. Create virtual environment
    ```bash
    # venv
    python -m venv ichigo-whisper
@@ -109,11 +143,6 @@ We employ a two-phase training strategy to optimize Ichigo-Whisper's performance
    ```bash
    git clone https://github.com/janhq/WhisperSpeech.git
    cd WhisperSpeech/ichigo-whisper
-
-   # from wheel package
-   pip install -e .
-
-   # from source 
    pip install -r requirements.txt
    cd src/ichigo-whisper
    ```

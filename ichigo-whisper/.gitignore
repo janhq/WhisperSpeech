@@ -146,7 +146,7 @@ dmypy.json
 # VisualStudioCode Patch
 # Ignore all local history of files
 **/.history
-
+*.pypirc
 wandb/
 **/outputs
 __pycache__/

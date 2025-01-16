@@ -16,3 +16,5 @@ jiwer
 gradio
 matplotlib
 seaborn
+build
+twine
