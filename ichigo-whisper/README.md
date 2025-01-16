@@ -10,7 +10,7 @@
 [**About**](#about) | [**Demo**](#demo) | [**Model Summary**](#model-summary) | [**Training**](#training)
 
 
-  <img src="https://github.com/janhq/WhisperSpeech/blob/main/assets/ichigowhisper.png" width="400"/>
+  <img src="https://github.com/janhq/WhisperSpeech/blob/main/ichigo-whisper/assets/ichigowhisper.png" width="400"/>
   <p><small>Homebrew ASR quantizer model</a></small></p>
 </div>
 
@@ -21,7 +21,7 @@ Ichigo-Whisper is a compact (22M parameters), open-source speech tokenizer desig
 Unlike models that output continuous embeddings, Ichigo-Whisper compresses speech into **discrete tokens**. This approach makes it more compatible with large language models (LLMs) for immediate speech understanding and downstream tasks.
 
 <div align="center">
-   <img src="https://github.com/janhq/WhisperSpeech/blob/main/assets/ichigowhisper-eval.png" width="550"/>
+   <img src="https://github.com/janhq/WhisperSpeech/blob/main/ichigo-whisper/assets/ichigowhisper-eval.png" width="550"/>
    <p><small>Evaluation of Ichigo Whisper's performance</small></p>
 </div>
 
@@ -45,7 +45,7 @@ We introduce a method for initializing the codebook weights in the VQ model. Ins
 
 <div align="center">
 
-  <img src="https://github.com/janhq/WhisperSpeech/blob/main/assets/ichigowhisper-mergecode.png" width="550"/>
+  <img src="https://github.com/janhq/WhisperSpeech/blob/main/ichigo-whisper/assets/ichigowhisper-mergecode.png" width="550"/>
   <p><small>Codebook initialization of Ichigo Whisper</a></small></p>
 </div>
 
