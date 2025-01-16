@@ -8,7 +8,7 @@ version = "0.1.0"
 authors = [
     { name = "Charles", email = "charles@jan.ai" },
 ]
-description = "Ichigo Whisper is a compact (22M parameters), open-source speech tokenizer for the `whisper-medium` model, designed to enhance performance on multilingual with minimal impact on its original English capabilities. Unlike models that output continuous embeddings, Ichigo Whisper compresses speech into discrete tokens, making it more compatible with large language models (LLMs) for immediate speech understanding."
+description = "Ichigo Whisper is a compact (22M parameters), open-source speech tokenizer for the whisper-medium model, designed to enhance performance on multilingual with minimal impact on its original English capabilities. Unlike models that output continuous embeddings, Ichigo Whisper compresses speech into discrete tokens, making it more compatible with large language models (LLMs) for immediate speech understanding."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -30,6 +30,8 @@ dependencies = [
     "gradio",
     "matplotlib",
     "seaborn",
+    "build",
+    "twine",
 ]
 
 [tool.hatch.build]
