@@ -107,6 +107,7 @@ pip install ichigo-whisper
 2. Inference with your audio
 
 ```python
+import torch, torchaudio
 from ichigo_whisper.demo.utils import load_model
 
 # Load Ichigo Whisper
@@ -115,11 +116,11 @@ ichigo_model = load_model(
         size="merge-medium-vi-2d-2560c-dim64",
 )
 device = "cuda" if torch.cuda.is_available() else "cpu"
-ichigo_model.ensure_whisper(device, language="demo")
+ichigo_model.ensure_whisper(device)
 ichigo_model.to(device)
 
 # Inference
-wav, sr = torchaudio.load("path/to/your/audio")
+wav, sr = torchaudio.load("path/to/your/audip")
 if sr != 16000:
    wav = torchaudio.functional.resample(wav, sr, 16000)
 transcribe = ichigo_model.inference(wav.to(device))
