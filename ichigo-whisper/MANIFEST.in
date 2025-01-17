@@ -1,2 +1,2 @@
 include README.md
-recursive-include src/ichigo_whisper *
+recursive-include src/ichigo_asr *

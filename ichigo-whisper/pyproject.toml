@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ichigo_whisper"
-version = "2.3.0"
+name = "ichigo_asr"
+version = "0.1.0"
 authors = [
     { name = "Charles", email = "charles@jan.ai" },
 ]
@@ -37,11 +37,11 @@ dependencies = [
 [tool.setuptools]
 package-dir = {"" = "src"}
 packages = [
-    "ichigo_whisper",
-    "ichigo_whisper.config",
-    "ichigo_whisper.data",
-    "ichigo_whisper.demo",
-    "ichigo_whisper.models",
-    "ichigo_whisper.trainer",
-    "ichigo_whisper.utils"
+    "ichigo_asr",
+    "ichigo_asr.config",
+    "ichigo_asr.data",
+    "ichigo_asr.demo",
+    "ichigo_asr.models",
+    "ichigo_asr.trainer",
+    "ichigo_asr.utils"
 ]

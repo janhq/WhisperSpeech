@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🍰 Ichigo-Whisper.
+# 🍰 Ichigo-ASR.
 <a href=''><img src='https://img.shields.io/badge/Project-Blog-Green'></a>
 <a href='https://ichigo-whisper.homebrew.ltd/'><img src='https://img.shields.io/badge/Project-Demo-violet'></a>
 <a href='https://arxiv.org/pdf/2410.15316'><img src='https://img.shields.io/badge/Paper-Arxiv-red'></a>
@@ -16,9 +16,9 @@
 
 ## About
 
-Ichigo-Whisper is a compact (22M parameters), open-source speech tokenizer designed to enhance the performance of the `Whisper-medium` model, particularly for multilingual, while maintaining strong English language capabilities.
+Ichigo-ASR is a compact (22M parameters), open-source speech tokenizer designed to enhance the performance of the `Whisper-medium` model, particularly for multilingual, while maintaining strong English language capabilities.
 
-Unlike models that output continuous embeddings, Ichigo-Whisper compresses speech into **discrete tokens**. This approach makes it more compatible with large language models (LLMs) for immediate speech understanding and downstream tasks.
+Unlike models that output continuous embeddings, Ichigo-ASR compresses speech into **discrete tokens**. This approach makes it more compatible with large language models (LLMs) for immediate speech understanding and downstream tasks.
 
 <div align="center">
    <img src="https://raw.githubusercontent.com/janhq/WhisperSpeech/refs/heads/main/ichigo-whisper/assets/ichigowhisper-eval.png" width="550"/>
@@ -37,7 +37,7 @@ Unlike models that output continuous embeddings, Ichigo-Whisper compresses speec
 
 ### Architecture
 
-Ichigo-Whisper's architecture is inspired by the WhisperVQ model from [WhisperSpeech](https://github.com/collabora/WhisperSpeech). It is a quantizer built on top of the Whisper-medium model, transforming continuous audio embeddings into discrete codebook entries. This quantization process allows for more efficient integration with LLMs, enabling direct speech understanding without the need for intermediate text representation.
+Ichigo-ASR's architecture is inspired by the WhisperVQ model from [WhisperSpeech](https://github.com/collabora/WhisperSpeech). It is a quantizer built on top of the Whisper-medium model, transforming continuous audio embeddings into discrete codebook entries. This quantization process allows for more efficient integration with LLMs, enabling direct speech understanding without the need for intermediate text representation.
 
 ### Codebook Initialization
 
@@ -85,7 +85,7 @@ For further details on ablation studies related to codebook initialization, plea
 
 ### Two-Phase Training Methodology
 
-We employ a two-phase training strategy to optimize Ichigo-Whisper's performance:
+We employ a two-phase training strategy to optimize Ichigo-ASR's performance:
 
 *   **Phase 1:** We train the model using a KL divergence loss against the output of the Whisper-medium model. This phase establishes a strong foundation and aligns the quantizer with the original model's representations.
 *   **Phase 2:** Recognizing that solely relying on Whisper-medium's output can limit performance, we introduce further training in this phase.
@@ -98,19 +98,20 @@ We employ a two-phase training strategy to optimize Ichigo-Whisper's performance
 
 <!-- python=3.10
 python -m build
-python -m twine upload dist/* -->
+python -m twine upload dist/* 
+python -c "import ichigo_asr; print(ichigo_asr.__file__)"-->
 
 1. Install python package
 
 ```bash
-pip install ichigo-whisper
+pip install ichigo_asr
 ```
 
 2. Inference with your audio
 
 ```python
 import torch, torchaudio
-from ichigo_whisper.demo.utils import load_model
+from ichigo_asr.demo.utils import load_model
 
 # Load Ichigo Whisper
 ichigo_model = load_model(
@@ -191,7 +192,7 @@ python demo/app.py
 ## Acknowledgement
 
 - [WhisperSpeech](https://github.com/collabora/WhisperSpeech): Text-to-speech model for synthetic audio generation
-- [Gradio](https://www.gradio.app/): A user-friendly library for building Ichigo-Whisper demo
+- [Gradio](https://www.gradio.app/): A user-friendly library for building Ichigo-ASR demo
 
 You can try the demo directly in [here.](https://ichigo-whisper.homebrew.ltd/)
 
