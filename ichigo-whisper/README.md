@@ -95,7 +95,9 @@ We employ a two-phase training strategy to optimize Ichigo-Whisper's performance
 
 ### PyPI
 
-<!-- python -m build
+
+<!-- python=3.10
+python -m build
 python -m twine upload dist/* -->
 
 1. Install python package
@@ -120,7 +122,7 @@ ichigo_model.ensure_whisper(device)
 ichigo_model.to(device)
 
 # Inference
-wav, sr = torchaudio.load("path/to/your/audip")
+wav, sr = torchaudio.load("path/to/your/audio")
 if sr != 16000:
    wav = torchaudio.functional.resample(wav, sr, 16000)
 transcribe = ichigo_model.inference(wav.to(device))
@@ -174,14 +176,11 @@ sh scripts/test.sh
 
 ```bash
 python demo/inference.py -i path/to/your/audio.wav 
-
-# Example 
-# python demo/inference.py -i demo/samples/test.wav
 ```
 
 ### Demo
 
-```python
+```bash
 python demo/app.py
 ```
 
