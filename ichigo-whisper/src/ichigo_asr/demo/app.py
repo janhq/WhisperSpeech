@@ -13,7 +13,7 @@ import torchaudio
 import whisper
 from transformers import pipeline
 
-from ichigo_whisper.demo.utils import load_model
+from ichigo_asr.demo.utils import load_model
 
 # ! Ichigo Whisper
 ichigo_name = "homebrewltd/ichigo-whisper:merge-medium-vi-2d-2560c-dim64.pth"

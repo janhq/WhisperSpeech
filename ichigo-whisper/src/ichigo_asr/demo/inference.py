@@ -26,7 +26,7 @@ def parse_args():
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
 
-from ichigo_whisper.demo.utils import load_model
+from ichigo_asr.demo.utils import load_model
 
 
 def main():
