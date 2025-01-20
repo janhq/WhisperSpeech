@@ -2,7 +2,7 @@ from typing import Optional
 
 from torch import Tensor, nn
 
-from ichigo_whisper.models.modules import LayerNorm, MultiHeadAttention
+from ichigo_asr.models.modules import LayerNorm, MultiHeadAttention
 
 
 class ResidualAttentionBlock(nn.Module):
